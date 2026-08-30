@@ -1,0 +1,58 @@
+universe:
+  exchange: NYSE
+  include_adrs: false
+  min_market_cap: 250000000
+  min_price: 3.0
+  min_median_dollar_volume_60d: 1000000
+  exclude_name_patterns:
+    - "\\bETF\\b"
+    - "\\bETN\\b"
+    - "\\bFUND\\b"
+    - "\\bTRUST\\b"
+    - "\\bPREFERRED\\b"
+    - "\\bDEPOSITARY\\b"
+    - "\\bWARRANT"
+    - "\\bRIGHTS?\\b"
+    - "\\bUNITS?\\b"
+    - "\\bACQUISITION CORP"
+
+fundamentals:
+  min_positive_years: 8
+  history_years: 10
+  min_interest_coverage: 3.0
+  max_net_debt_to_ebitda: 3.0
+  require_positive_cfo: true
+  winsor_lower: 0.025
+  winsor_upper: 0.975
+
+valuation:
+  value_weights:
+    earnings_yield: 0.30
+    cfo_yield: 0.25
+    fcf_yield: 0.25
+    book_to_market: 0.20
+  quality_weights:
+    roa: 0.30
+    accrual_quality: 0.20
+    leverage: 0.20
+    interest_coverage: 0.15
+    earnings_stability: 0.15
+  score_weights:
+    value: 0.45
+    quality: 0.35
+    stability: 0.20
+
+portfolio:
+  capital: 5000.0
+  target_positions: 30
+  max_position_weight: 0.06
+  max_sector_weight: 0.25
+  fractional_shares: true
+  minimum_trade_dollars: 10.0
+  entry_rank: 25
+  exit_rank: 40
+  turnover_limit: 0.25
+
+schedule:
+  quarterly_rebalance_months: [3, 9]
+  full_reconstruction_months: [6, 12]
