@@ -1,85 +1,97 @@
-# Graham NYSE Portfolio Engine
+# Graham NYSE Historical Portfolio Engine
 
-A deterministic Python implementation of a modernized Benjamin Graham portfolio process over NYSE-listed operating companies.
+A deterministic Python research engine for Graham-style portfolio construction over the historical NYSE common-equity universe.
 
-## Boundary
+## Control boundary
 
-Python owns all data processing, eligibility rules, valuation signals, scores, weights, shares, trades, and validations. An LLM may consume `report_context.json` only to produce narrative commentary. It must not change the portfolio.
+Python owns data timing, security eligibility, accounting normalization, valuation, scoring, constituent selection, weights, trades, taxes, validation, benchmarks, and factor attribution. An LLM may explain a validated report payload; it cannot add or modify a security, weight, trade, number, or calculation.
 
-## Components
+## Historical model
 
-1. `data/sec.py` — obtains the SEC exchange/ticker universe and Company Facts.
-2. `data/market.py` — obtains prices, market capitalization, and liquidity observations.
-3. `data/fundamentals.py` — maps XBRL concepts into normalized annual fundamentals.
-4. `portfolio/scoring.py` — applies hard safety gates and computes value/quality scores.
-5. `portfolio/construction.py` — selects securities, caps weights, supports fractional shares, and calculates rebalance orders.
-6. `validation.py` — fails closed when portfolio invariants are violated.
-7. `reporting/payload.py` — emits a schema-limited JSON payload for narrative generation.
-8. `pipeline.py` — orchestrates monthly monitoring, quarterly rebalancing, and semiannual reconstruction modes.
+The backtest does not apply today's portfolio to prior returns. It reconstructs the information set through time:
+
+1. Determine the common stocks actively listed on the NYSE at the historical decision date, including issuers that later became inactive or delisted.
+2. Expose only filings whose SEC acceptance timestamp is at or before the decision cutoff.
+3. Merge raw prices and liquidity observations available by that date.
+4. Apply the accounting model for the company's domain and sector.
+5. Recalculate the selected strategy scenario and portfolio weights.
+6. Monitor every month, rebalance incumbents in March and September, and reconstruct in June and December.
+7. Process dividends, splits, delistings, transaction costs, tax lots, and annual tax settlements explicitly.
+
+The old as_of_date feature-panel and adjusted-price interfaces have been removed because they could not prove filing availability, historical membership, or corporate-action treatment.
+
+## Strategy scenarios
+
+- defensive: strict history and quality requirements.
+- enterprising: broader eligibility with greater valuation emphasis.
+- deep_value: strongest relative-value emphasis with a lower quality floor.
+- quality_value: balanced relative value and quality.
+
+Every scenario uses domain-relative and, where configured, sector-relative gates and factors. Ordinary companies, banks, insurers, and REITs have separate accounting models.
+
+## Weighting strategies
+
+Every scenario is tested with equal, score-proportional, inverse-volatility, score/volatility, minimum-variance, and liquidity-adjusted equal weighting. All methods use the same position and sector constraints.
+
+## Tax modes
+
+- tax_deferred
+- taxable_fifo_no_liquidation
+- taxable_hifo_no_liquidation
+- taxable_hifo_terminal_liquidation
+
+The taxable modes maintain lots, holding periods, qualified and ordinary dividends, short- and long-term netting, loss carryforwards, and wash-sale basis adjustments. Tax rates are configurable assumptions, not individualized tax advice.
+Tax payment source is independently configurable as portfolio cash or external cash; external payments are deducted in the reported after-tax total-wealth metric.
 
 ## Install
 
-```bash
+~~~bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .[dev]
-```
+~~~
 
-## Run
+## Run one historical specification
 
-The SEC requires a descriptive user agent with contact information.
-
-```bash
-export SEC_USER_AGENT="graham-portfolio your_email@example.com"
-graham-nyse run --config config/strategy.yaml --output outputs/latest
-```
-
-## Outputs
-
-- `universe.csv`
-- `fundamental_dataset.parquet`
-- `scored_universe.csv`
-- `target_portfolio.csv`
-- `report_context.json`
-- `run_audit.json`
-
-## Known limitations before live use
-
-- Yahoo Finance is used only as a prototype market-data adapter and should be replaced or snapshotted for production reproducibility.
-- XBRL concept mapping is conservative but not complete; banks, insurers, REITs, foreign private issuers, and industry-specific accounting require separate models.
-- The current name-based security-type filter should be supplemented with a licensed or exchange-native security master.
-- Intrinsic-value Monte Carlo and sector-specific models are not yet implemented in version 0.1.0.
-- This code must be backtested with point-in-time membership, delisting returns, filing lags, and transaction costs before capital is allocated.
-
-## Ten-year point-in-time backtest
-
-The backtest consumes two explicit datasets:
-
-1. A point-in-time feature panel with one row per `as_of_date` and `ticker`.
-2. A long-form adjusted-price panel with `date`, `ticker`, and `adjusted_close`.
-
-Run:
-
-```bash
+~~~bash
 graham-nyse backtest \
-  --features data/features_point_in_time.parquet \
-  --prices data/prices_adjusted.parquet \
+  --filing-vintages data/filing_vintages.parquet \
+  --security-master data/security_master.parquet \
+  --prices data/raw_prices.parquet \
+  --corporate-actions data/corporate_actions.parquet \
+  --benchmarks data/benchmark_total_returns.parquet \
+  --factors data/factor_returns.parquet \
+  --scenario quality_value \
+  --weighting-strategy equal \
+  --tax-mode tax_deferred \
   --start 2016-07-01 \
   --end 2026-06-30 \
-  --transaction-cost-bps 10 \
-  --output outputs/backtest_10y
-```
+  --output outputs/historical_quality_value_equal
+~~~
 
-The engine performs initial construction on the first trading day, weight-only rebalances in March and September, and full reconstructions in June and December. It produces daily NAV, historical holdings, trades, turnover, transaction costs, CAGR, volatility, Sharpe ratio, and maximum drawdown.
+## Run the 24-cell research matrix
 
-A credible historical result requires a survivorship-bias-free security master, delisted-security returns, and fundamentals keyed to the date they became public. The current NYSE listing file and Yahoo adapter are suitable for live prototyping, not for claiming an unbiased historical return.
+~~~bash
+graham-nyse experiment-matrix \
+  --filing-vintages data/filing_vintages.parquet \
+  --security-master data/security_master.parquet \
+  --prices data/raw_prices.parquet \
+  --corporate-actions data/corporate_actions.parquet \
+  --start 2016-07-01 \
+  --end 2026-06-30 \
+  --output outputs/scenario_weight_matrix
+~~~
 
-## Local validation
+## Validation
 
-Run the deterministic tests and generated 10-year fixture with:
-
-```bash
+~~~bash
 ./scripts/run_local_validation.sh
-```
+~~~
 
-Only a rounded, aggregate validation record is retained in [`docs/BACKTEST_VALIDATION.md`](docs/BACKTEST_VALIDATION.md). Raw fixture holdings, trades, prices, features, and NAV outputs are gitignored. The recorded figures validate software mechanics only and are not historical performance claims.
+The generated fixture is named a **simulation smoke test**. It verifies event timing, constraints, tax lots, delisting treatment, and output generation. It does not publish CAGR, volatility, drawdown, alpha, or benchmark comparisons because generated returns are not investment evidence.
+
+See [DATA_CONTRACTS.md](docs/DATA_CONTRACTS.md) and [SIMULATION_SMOKE_TEST.md](docs/SIMULATION_SMOKE_TEST.md).
+
+## Evidence status
+
+The engine can produce an empirical result only when supplied with a survivorship-free historical security master, delisting returns, raw security returns and corporate actions, immutable SEC filing vintages, historical classifications, benchmarks, and factor returns. The included fixture validates software only.

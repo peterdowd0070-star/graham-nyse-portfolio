@@ -5,5 +5,4 @@ __pycache__/
 outputs/
 .cache/
 *.egg-info/
-tests/fixtures/demo_features_10y.csv
-tests/fixtures/demo_prices_10y.csv
+tests/fixtures/smoke_*.csv

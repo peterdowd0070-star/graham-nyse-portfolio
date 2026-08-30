@@ -4,11 +4,12 @@ universe:
   min_market_cap: 250000000
   min_price: 3.0
   min_median_dollar_volume_60d: 1000000
+  require_delisting_returns: true
+  maximum_price_staleness_days: 5
   exclude_name_patterns:
     - "\\bETF\\b"
     - "\\bETN\\b"
     - "\\bFUND\\b"
-    - "\\bTRUST\\b"
     - "\\bPREFERRED\\b"
     - "\\bDEPOSITARY\\b"
     - "\\bWARRANT"
@@ -17,30 +18,136 @@ universe:
     - "\\bACQUISITION CORP"
 
 fundamentals:
-  min_positive_years: 8
   history_years: 10
-  min_interest_coverage: 3.0
-  max_net_debt_to_ebitda: 3.0
-  require_positive_cfo: true
   winsor_lower: 0.025
   winsor_upper: 0.975
+  minimum_group_size: 5
 
 valuation:
-  value_weights:
-    earnings_yield: 0.30
-    cfo_yield: 0.25
-    fcf_yield: 0.25
-    book_to_market: 0.20
-  quality_weights:
-    roa: 0.30
-    accrual_quality: 0.20
-    leverage: 0.20
-    interest_coverage: 0.15
-    earnings_stability: 0.15
-  score_weights:
-    value: 0.45
-    quality: 0.35
-    stability: 0.20
+  domains:
+    ordinary:
+      hard_gates:
+        interest_coverage: {minimum: 3.0, required: true}
+        cfo: {minimum: 0.0, required: true}
+        current_ratio: {minimum: 1.2, required: false}
+      value_factors:
+        earnings_yield: {weight: 0.30, higher_is_better: true}
+        cfo_yield: {weight: 0.20, higher_is_better: true}
+        fcf_yield: {weight: 0.30, higher_is_better: true}
+        book_to_market: {weight: 0.20, higher_is_better: true}
+      quality_factors:
+        roa: {weight: 0.30, higher_is_better: true}
+        accruals: {weight: 0.20, higher_is_better: false}
+        leverage: {weight: 0.20, higher_is_better: false}
+        interest_coverage: {weight: 0.15, higher_is_better: true}
+        earnings_stability: {weight: 0.15, higher_is_better: false}
+      sector_overrides:
+        Utilities:
+          hard_gates:
+            interest_coverage: {minimum: 2.0, required: true}
+          value_factors:
+            earnings_yield: {weight: 0.35, higher_is_better: true}
+            fcf_yield: {weight: 0.15, higher_is_better: true}
+            book_to_market: {weight: 0.30, higher_is_better: true}
+            dividend_yield: {weight: 0.20, higher_is_better: true}
+        Energy:
+          value_factors:
+            normalized_earnings_yield: {weight: 0.35, higher_is_better: true}
+            fcf_yield: {weight: 0.35, higher_is_better: true}
+            book_to_market: {weight: 0.30, higher_is_better: true}
+    bank:
+      hard_gates:
+        cet1_ratio: {minimum: 0.07, required: true}
+        nonperforming_assets_ratio: {maximum: 0.05, required: true}
+        tangible_equity: {minimum: 0.0, required: true}
+      value_factors:
+        earnings_yield: {weight: 0.40, higher_is_better: true}
+        tangible_book_to_market: {weight: 0.40, higher_is_better: true}
+        normalized_roe_yield: {weight: 0.20, higher_is_better: true}
+      quality_factors:
+        roa: {weight: 0.25, higher_is_better: true}
+        roe: {weight: 0.20, higher_is_better: true}
+        cet1_ratio: {weight: 0.25, higher_is_better: true}
+        nonperforming_assets_ratio: {weight: 0.20, higher_is_better: false}
+        deposit_funding_ratio: {weight: 0.10, higher_is_better: true}
+      sector_overrides: {}
+    insurer:
+      hard_gates:
+        statutory_capital_ratio: {minimum: 1.0, required: true}
+        equity: {minimum: 0.0, required: true}
+      value_factors:
+        earnings_yield: {weight: 0.45, higher_is_better: true}
+        book_to_market: {weight: 0.40, higher_is_better: true}
+        free_surplus_yield: {weight: 0.15, higher_is_better: true}
+      quality_factors:
+        roe: {weight: 0.25, higher_is_better: true}
+        combined_ratio: {weight: 0.25, higher_is_better: false}
+        reserve_development_ratio: {weight: 0.20, higher_is_better: false}
+        statutory_capital_ratio: {weight: 0.20, higher_is_better: true}
+        earnings_stability: {weight: 0.10, higher_is_better: false}
+      sector_overrides: {}
+    reit:
+      hard_gates:
+        fixed_charge_coverage: {minimum: 1.5, required: true}
+        dividend_coverage: {minimum: 1.0, required: true}
+        occupancy: {minimum: 0.75, required: false}
+      value_factors:
+        ffo_yield: {weight: 0.35, higher_is_better: true}
+        affo_yield: {weight: 0.35, higher_is_better: true}
+        nav_discount: {weight: 0.20, higher_is_better: true}
+        dividend_yield: {weight: 0.10, higher_is_better: true}
+      quality_factors:
+        fixed_charge_coverage: {weight: 0.25, higher_is_better: true}
+        net_debt_to_ebitda: {weight: 0.25, higher_is_better: false}
+        occupancy: {weight: 0.20, higher_is_better: true}
+        dividend_coverage: {weight: 0.20, higher_is_better: true}
+        earnings_stability: {weight: 0.10, higher_is_better: false}
+      sector_overrides:
+        Hotels:
+          hard_gates:
+            occupancy: {minimum: 0.55, required: false}
+        Data Centers:
+          value_factors:
+            affo_yield: {weight: 0.45, higher_is_better: true}
+            nav_discount: {weight: 0.35, higher_is_better: true}
+            dividend_yield: {weight: 0.20, higher_is_better: true}
+  scenarios:
+    defensive:
+      value_weight: 0.35
+      quality_weight: 0.40
+      stability_weight: 0.20
+      confidence_weight: 0.05
+      minimum_positive_year_ratio: 0.80
+      minimum_history_years: 10
+      minimum_value_percentile: 0.25
+      minimum_quality_percentile: 0.40
+    enterprising:
+      value_weight: 0.55
+      quality_weight: 0.25
+      stability_weight: 0.15
+      confidence_weight: 0.05
+      minimum_positive_year_ratio: 0.60
+      minimum_history_years: 7
+      minimum_value_percentile: 0.35
+      minimum_quality_percentile: 0.15
+    deep_value:
+      value_weight: 0.65
+      quality_weight: 0.20
+      stability_weight: 0.10
+      confidence_weight: 0.05
+      minimum_positive_year_ratio: 0.50
+      minimum_history_years: 5
+      minimum_value_percentile: 0.60
+      minimum_quality_percentile: 0.05
+    quality_value:
+      value_weight: 0.40
+      quality_weight: 0.40
+      stability_weight: 0.15
+      confidence_weight: 0.05
+      minimum_positive_year_ratio: 0.70
+      minimum_history_years: 7
+      minimum_value_percentile: 0.30
+      minimum_quality_percentile: 0.45
 
 portfolio:
   capital: 5000.0
@@ -52,7 +159,43 @@ portfolio:
   entry_rank: 25
   exit_rank: 40
   turnover_limit: 0.25
+  weighting_strategies:
+    - equal
+    - score_proportional
+    - inverse_volatility
+    - score_over_volatility
+    - minimum_variance
+    - liquidity_adjusted_equal
 
 schedule:
   quarterly_rebalance_months: [3, 9]
   full_reconstruction_months: [6, 12]
+  monitor_monthly: true
+
+execution:
+  transaction_cost_bps: 10.0
+  decision_time: "16:00:00"
+  execute_next_session: true
+  minimum_history_days_for_risk: 60
+  covariance_lookback_days: 252
+
+tax:
+  rates:
+    short_term: 0.37
+    long_term: 0.20
+    qualified_dividend: 0.20
+    ordinary_dividend: 0.37
+  wash_sale_days: 30
+  long_term_days: 365
+  payment_source: portfolio
+  modes:
+    - tax_deferred
+    - taxable_fifo_no_liquidation
+    - taxable_hifo_no_liquidation
+    - taxable_hifo_terminal_liquidation
+
+validation:
+  maximum_missing_required_rate: 0.0
+  accounting_tolerance: 0.02
+  nav_tolerance: 0.000001
+  fail_on_temporal_violation: true

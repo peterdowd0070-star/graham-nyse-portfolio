@@ -23,5 +23,12 @@ def fetch_market_snapshot(tickers: Iterable[str], period: str = "6mo") -> pd.Dat
         dollar_volume = (hist["Close"] * hist["Volume"]).dropna().tail(60)
         fast = obj.fast_info
         market_cap = fast.get("market_cap")
-        rows.append({"ticker": ticker, "price": close, "market_cap": float(market_cap) if market_cap is not None else np.nan, "median_dollar_volume_60d": float(dollar_volume.median())})
+        rows.append(
+            {
+                "ticker": ticker,
+                "price": close,
+                "market_cap": float(market_cap) if market_cap is not None else np.nan,
+                "median_dollar_volume_60d": float(dollar_volume.median()),
+            }
+        )
     return pd.DataFrame(rows)
