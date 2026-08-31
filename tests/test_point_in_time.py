@@ -5,6 +5,38 @@ from graham_nyse.data.vintages import FilingVintageStore
 from tests.fixtures.generate_simulation_smoke_test import build_smoke_frames
 
 
+def test_trade_inventory_reconciliation_applies_splits():
+    from graham_nyse.validation import _trade_inventory_errors
+
+    trades = pd.DataFrame(
+        [
+            {
+                "date": "2024-01-02",
+                "security_id": "A",
+                "trade_shares": 10.0,
+                "side": "BUY",
+            },
+            {
+                "date": "2024-01-04",
+                "security_id": "A",
+                "trade_shares": -20.0,
+                "side": "SELL",
+            },
+        ]
+    )
+    actions = pd.DataFrame(
+        [
+            {
+                "date": "2024-01-03",
+                "security_id": "A",
+                "action_type": "SPLIT",
+                "value": 2.0,
+            }
+        ]
+    )
+    assert _trade_inventory_errors(trades, actions) == []
+
+
 def test_filing_snapshot_never_uses_future_acceptance():
     frames = build_smoke_frames()
     store = FilingVintageStore.from_frame(frames["filing_vintages"])

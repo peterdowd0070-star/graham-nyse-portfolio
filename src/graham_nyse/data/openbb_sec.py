@@ -36,8 +36,18 @@ def normalize_openbb_pit_statement(
             "OpenBB SEC output is not point-in-time auditable; missing "
             f"{sorted(missing)}"
         )
-    frame["accepted_at"] = pd.to_datetime(frame["accepted_at"], utc=True)
-    frame["period_end"] = pd.to_datetime(frame["period_end"]).dt.normalize()
+    # Pandas 3 preserves the input's microsecond resolution, while older
+    # releases commonly normalized parsed timestamps to nanoseconds.  The
+    # canonical filing-vintage contract is explicit so provider adapters do
+    # not emit version-dependent dtypes.
+    frame["accepted_at"] = pd.to_datetime(frame["accepted_at"], utc=True).astype(
+        "datetime64[ns, UTC]"
+    )
+    frame["period_end"] = (
+        pd.to_datetime(frame["period_end"])
+        .astype("datetime64[ns]")
+        .dt.normalize()
+    )
     frame["security_id"] = str(security_id)
     if accession_column != "accession_number":
         frame = frame.rename(columns={accession_column: "accession_number"})

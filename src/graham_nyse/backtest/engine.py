@@ -607,6 +607,7 @@ def run_historical_backtest(
         trades,
         snapshots,
         cfg,
+        actions,
     )
     metadata = {
         "engine": "historical_point_in_time",

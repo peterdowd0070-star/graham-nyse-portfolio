@@ -55,17 +55,46 @@ def _accounting_errors(vintages: pd.DataFrame, tolerance: float) -> list[str]:
     return ["accounting_equation_failure"] if gap.gt(tolerance).any() else []
 
 
-def _trade_inventory_errors(trades: pd.DataFrame) -> list[str]:
+def _trade_inventory_errors(
+    trades: pd.DataFrame, corporate_actions: pd.DataFrame | None = None
+) -> list[str]:
     if trades.empty:
         return []
     inventory: dict[str, float] = {}
-    for row in trades.sort_values(["date", "side"]).itertuples(index=False):
-        security_id = str(row.security_id)
-        inventory[security_id] = inventory.get(security_id, 0.0) + float(
-            row.trade_shares
+    events: list[tuple[pd.Timestamp, int, str, float, str]] = []
+    if corporate_actions is not None and not corporate_actions.empty:
+        splits = corporate_actions.loc[corporate_actions["action_type"].eq("SPLIT")]
+        for row in splits.itertuples(index=False):
+            events.append(
+                (
+                    pd.Timestamp(row.date),
+                    0,
+                    str(row.security_id),
+                    float(row.value),
+                    "SPLIT",
+                )
+            )
+    for row in trades.itertuples(index=False):
+        # Corporate actions are applied before execution.  Within a session,
+        # buys precede sells for reconciliation so an initial purchase and a
+        # same-day terminal liquidation remain valid.
+        priority = 1 if str(row.side) == "BUY" else 2
+        events.append(
+            (
+                pd.Timestamp(row.date),
+                priority,
+                str(row.security_id),
+                float(row.trade_shares),
+                "TRADE",
+            )
         )
-        if inventory[security_id] < -1e-8:
-            return ["trade_inventory_below_zero"]
+    for _, _, security_id, value, event_type in sorted(events):
+        if event_type == "SPLIT":
+            inventory[security_id] = inventory.get(security_id, 0.0) * value
+        else:
+            inventory[security_id] = inventory.get(security_id, 0.0) + value
+            if inventory[security_id] < -1e-8:
+                return ["trade_inventory_below_zero"]
     return []
 
 
@@ -78,6 +107,7 @@ def validate_historical_run(
     trades: pd.DataFrame,
     snapshots: pd.DataFrame,
     cfg: StrategyConfig,
+    corporate_actions: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
@@ -101,7 +131,7 @@ def validate_historical_run(
         if incomplete.any():
             errors.append("missing_delisting_returns")
     errors.extend(_accounting_errors(vintages, cfg.validation.accounting_tolerance))
-    errors.extend(_trade_inventory_errors(trades))
+    errors.extend(_trade_inventory_errors(trades, corporate_actions))
     if not holdings.empty:
         grouped = holdings.groupby("date")["weight"].sum()
         if grouped.gt(1.0 + cfg.validation.nav_tolerance).any():
