@@ -14,6 +14,7 @@ from graham_nyse.backtest.metrics import (
 )
 from graham_nyse.backtest.tax import TaxLedger
 from graham_nyse.config import StrategyConfig, WeightStrategy
+from graham_nyse.data.certification import certify_historical_data
 from graham_nyse.data.security_master import SecurityMaster
 from graham_nyse.data.vintages import FilingVintageStore
 from graham_nyse.portfolio.construction import construct_portfolio, select_constituents
@@ -133,7 +134,7 @@ def _market_snapshot(
         raise ValueError(f"No price history is available at {decision_date.date()}")
     latest = history.groupby("security_id", as_index=False).tail(1)
     latest = latest.rename(columns={"close": "price"})
-    trailing = history.loc[history["date"].ge(decision_date - pd.Timedelta("400D"))]
+    trailing = history.loc[history["date"].ge(decision_date - pd.Timedelta(days=400))]
     trailing = trailing.copy()
     trailing["dollar_volume"] = trailing["close"] * trailing["volume"]
     liquidity = trailing.groupby("security_id")["dollar_volume"].apply(
@@ -272,7 +273,7 @@ def run_historical_backtest(
     actions = _validate_actions(corporate_actions)
     start_ts, end_ts = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
     price_frame = price_frame.loc[
-        price_frame["date"].between(start_ts - pd.Timedelta("400D"), end_ts)
+        price_frame["date"].between(start_ts - pd.Timedelta(days=400), end_ts)
     ].copy()
     dates = pd.DatetimeIndex(
         sorted(
@@ -308,8 +309,73 @@ def run_historical_backtest(
     turnover_rows: list[tuple[pd.Timestamp, float]] = []
     previous_cutoff: pd.Timestamp | None = None
 
+    def fund_tax_liability(day: pd.Timestamp, year: int, current_cash: float) -> float:
+        """Raise cash for taxes through explicit sales; implicit borrowing is forbidden."""
+        rate = cfg.execution.transaction_cost_bps / 10_000.0
+        tolerance = cfg.validation.nav_tolerance
+        for _ in range(max(4, len(shares) * 2)):
+            tax_due = tax.estimate_year_tax(year)
+            if current_cash + tolerance >= tax_due:
+                return current_cash
+            candidates = sorted(
+                (
+                    (security_id, quantity, last_prices.get(security_id))
+                    for security_id, quantity in shares.items()
+                    if quantity > 1e-12
+                ),
+                key=lambda item: (-(item[1] * float(item[2] or 0.0)), item[0]),
+            )
+            if not candidates:
+                break
+            security_id, held_quantity, price_value = candidates[0]
+            if price_value is None:
+                raise RuntimeError(
+                    f"Cannot fund tax liability without a price for {security_id}"
+                )
+            price = float(price_value)
+            shortfall = max(0.0, tax_due - current_cash)
+            # A sale can itself create a short-term gain.  Gross up by the
+            # maximum configured tax rate and transaction cost, then re-estimate.
+            worst_tax_rate = max(
+                cfg.tax.rates.short_term,
+                cfg.tax.rates.long_term,
+            )
+            denominator = max(0.05, 1.0 - rate - worst_tax_rate)
+            requested_dollars = shortfall / denominator
+            quantity = min(held_quantity, requested_dollars / price)
+            if quantity <= 1e-12:
+                break
+            dollars = quantity * price
+            cost = dollars * rate
+            realized = tax.sell(security_id, quantity, price, day)
+            current_cash += dollars - cost
+            shares[security_id] -= quantity
+            if shares[security_id] <= 1e-12:
+                shares.pop(security_id, None)
+            trade_rows.append(
+                {
+                    "date": day,
+                    "decision_at": pd.NaT,
+                    "run_type": "tax_funding",
+                    "security_id": security_id,
+                    "trade_shares": -quantity,
+                    "trade_price": price,
+                    "trade_dollars": -dollars,
+                    "transaction_cost": cost,
+                    "realized_gain": realized,
+                    "side": "SELL",
+                }
+            )
+        remaining = tax.estimate_year_tax(year)
+        if current_cash + tolerance < remaining:
+            raise RuntimeError(
+                f"Portfolio cannot fund {year} tax liability without borrowing: "
+                f"cash={current_cash:.2f}, estimated_tax={remaining:.2f}"
+            )
+        return current_cash
+
     # Initial construction uses only information public before the first session.
-    initial_decision_date = dates[0] - pd.Timedelta("1D")
+    initial_decision_date = dates[0] - pd.Timedelta(days=1)
     initial, audit_row, score_frame = _build_decision(
         store,
         master,
@@ -414,6 +480,10 @@ def run_historical_backtest(
         if day in pending:
             decision = pending.pop(day)
             pre_trade_nav = marked_nav(day, cash)
+            active_master = master.active_as_of(day, cfg.universe.exchange)
+            active_master = active_master.drop_duplicates("security_id", keep="last")
+            active_master_by_id = active_master.set_index("security_id")
+            sector_by_id = active_master_by_id["sector"].astype(str).to_dict()
             selected = decision.selected.loc[
                 decision.selected["security_id"].isin(day_prices.index.astype(str))
             ].copy()
@@ -442,7 +512,24 @@ def run_historical_backtest(
                         f"No execution price for {security_id} on {day.date()}"
                     )
                 delta = desired.get(security_id, 0.0) - shares.get(security_id, 0.0)
-                if abs(delta * price) < cfg.portfolio.minimum_trade_dollars:
+                current_value = shares.get(security_id, 0.0) * price
+                current_weight = current_value / max(pre_trade_nav, 1e-12)
+                sector_name = sector_by_id.get(security_id)
+                sector_value = sum(
+                    quantity * last_prices.get(held_id, 0.0)
+                    for held_id, quantity in shares.items()
+                    if sector_by_id.get(held_id) == sector_name
+                )
+                forced_cap_sale = delta < 0 and (
+                    current_weight
+                    > cfg.portfolio.max_position_weight + cfg.validation.nav_tolerance
+                    or sector_value / max(pre_trade_nav, 1e-12)
+                    > cfg.portfolio.max_sector_weight + cfg.validation.nav_tolerance
+                )
+                if (
+                    abs(delta * price) < cfg.portfolio.minimum_trade_dollars
+                    and not forced_cap_sale
+                ):
                     delta = 0.0
                 orders.append((security_id, delta, price))
             orders.sort(key=lambda order: order[1])  # sells fund buys
@@ -488,12 +575,95 @@ def run_historical_backtest(
                         "side": side,
                     }
                 )
+
+            def execute_cap_sale(
+                security_id: str,
+                requested_dollars: float,
+                execution_day: pd.Timestamp = day,
+                decision_at: pd.Timestamp = decision.decision_at,
+            ) -> None:
+                nonlocal cash, gross
+                price = last_prices[security_id]
+                held = shares.get(security_id, 0.0)
+                quantity = min(held, max(0.0, requested_dollars) / price)
+                if quantity <= 1e-12:
+                    return
+                dollars = quantity * price
+                rate = cfg.execution.transaction_cost_bps / 10_000.0
+                cost = dollars * rate
+                realized = tax.sell(security_id, quantity, price, execution_day)
+                cash += dollars - cost
+                shares[security_id] -= quantity
+                if shares[security_id] <= 1e-12:
+                    shares.pop(security_id, None)
+                gross += dollars
+                trade_rows.append(
+                    {
+                        "date": execution_day,
+                        "decision_at": decision_at,
+                        "run_type": "cap_enforcement",
+                        "security_id": security_id,
+                        "trade_shares": -quantity,
+                        "trade_price": price,
+                        "trade_dollars": -dollars,
+                        "transaction_cost": cost,
+                        "realized_gain": realized,
+                        "side": "SELL",
+                    }
+                )
+
+            # Costs and skipped dust can move realized weights above hard caps
+            # even when target weights were valid.  Trim against post-cost NAV.
+            for _ in range(max(4, len(shares) * 2)):
+                post_trade_nav = marked_nav(day, cash)
+                rate = cfg.execution.transaction_cost_bps / 10_000.0
+                violations: list[tuple[float, str, float]] = []
+                for security_id, quantity in shares.items():
+                    value = quantity * last_prices[security_id]
+                    excess = value - cfg.portfolio.max_position_weight * post_trade_nav
+                    if excess > cfg.validation.nav_tolerance:
+                        denominator = 1.0 - cfg.portfolio.max_position_weight * rate
+                        violations.append((excess, security_id, excess / denominator))
+                if violations:
+                    _, security_id, required = max(violations)
+                    execute_cap_sale(security_id, required)
+                    continue
+
+                sector_values: dict[str, float] = {}
+                sector_members: dict[str, list[str]] = {}
+                for security_id, quantity in shares.items():
+                    sector_name = sector_by_id.get(security_id, "Unknown")
+                    sector_values[sector_name] = (
+                        sector_values.get(sector_name, 0.0)
+                        + quantity * last_prices[security_id]
+                    )
+                    sector_members.setdefault(sector_name, []).append(security_id)
+                sector_excesses = [
+                    (value - cfg.portfolio.max_sector_weight * post_trade_nav, sector)
+                    for sector, value in sector_values.items()
+                    if value - cfg.portfolio.max_sector_weight * post_trade_nav
+                    > cfg.validation.nav_tolerance
+                ]
+                if sector_excesses:
+                    excess, sector_name = max(sector_excesses)
+                    security_id = max(
+                        sector_members[sector_name],
+                        key=lambda item: shares[item] * last_prices[item],
+                    )
+                    denominator = 1.0 - cfg.portfolio.max_sector_weight * rate
+                    execute_cap_sale(security_id, excess / denominator)
+                    continue
+                break
+            else:
+                raise RuntimeError(f"Could not enforce realized caps on {day.date()}")
             turnover_rows.append((day, gross / (2.0 * max(pre_trade_nav, 1e-12))))
             post_nav = marked_nav(day, cash)
             for security_id, quantity in shares.items():
-                security = master.frame.loc[
-                    master.frame["security_id"].eq(security_id)
-                ].iloc[0]
+                if security_id not in active_master_by_id.index:
+                    raise RuntimeError(
+                        f"Held security {security_id} is not active on {day.date()}"
+                    )
+                security = active_master_by_id.loc[security_id]
                 value = quantity * last_prices[security_id]
                 holding_rows.append(
                     {
@@ -502,6 +672,7 @@ def run_historical_backtest(
                         "run_type": decision.run_type,
                         "security_id": security_id,
                         "ticker": security["ticker"],
+                        "sector": security["sector"],
                         "scenario": scenario,
                         "weighting_strategy": weighting_strategy,
                         "shares": quantity,
@@ -512,6 +683,8 @@ def run_historical_backtest(
                 )
 
         if final_session_by_year.get(day.year) == day:
+            if payment_source == "portfolio":
+                cash = fund_tax_liability(day, day.year, cash)
             tax_due = tax.settle_year(day.year)
             if payment_source == "portfolio":
                 cash -= tax_due
@@ -538,6 +711,8 @@ def run_historical_backtest(
             if scheduled_decision is not None and execution_day is not None:
                 pending[execution_day] = scheduled_decision
 
+        if -cfg.validation.nav_tolerance <= cash < 0.0:
+            cash = 0.0
         nav_rows.append(
             {
                 "date": day,
@@ -578,6 +753,8 @@ def run_historical_backtest(
             cash -= tax_due
         else:
             external_tax_paid += tax_due
+        if -cfg.validation.nav_tolerance <= cash < 0.0:
+            cash = 0.0
         nav_rows[-1]["nav"] = cash
         nav_rows[-1]["cash"] = cash
 
@@ -609,6 +786,9 @@ def run_historical_backtest(
         cfg,
         actions,
     )
+    certification = certify_historical_data(
+        master.frame, price_frame, actions, store.frame
+    )
     metadata = {
         "engine": "historical_point_in_time",
         "scenario": scenario,
@@ -622,6 +802,8 @@ def run_historical_backtest(
         "market_data_provider": market_provider or "unspecified",
         "filing_availability_field": "accepted_at",
         "methodology_version": "1.0.0",
+        "data_certification": certification.as_dict(),
+        "publication_status": certification.status,
     }
     if not audit["passed"]:
         raise RuntimeError(f"Historical validation failed: {audit['errors']}")

@@ -59,6 +59,8 @@ class SharadarExportProvider:
         reference["security_id"] = "SHARADAR:" + reference["permaticker"].astype(str)
         reference["issuer_id"] = reference["security_id"]
         reference["security_type"] = "common_stock"
+        reference["identifier_type"] = "permaticker"
+        reference["identifier_quality"] = "provider_permanent"
         reference["listing_start"] = pd.to_datetime(reference["firstpricedate"])
         reference["listing_end"] = pd.to_datetime(
             reference["lastpricedate"], errors="coerce"
@@ -81,6 +83,8 @@ class SharadarExportProvider:
             "listing_end",
             "is_delisted",
             "delisting_return",
+            "identifier_type",
+            "identifier_quality",
         ]
         master = reference[master_columns]
 
@@ -88,7 +92,7 @@ class SharadarExportProvider:
         price_frame["date"] = pd.to_datetime(price_frame["date"])
         price_frame = price_frame.loc[
             price_frame["date"].between(
-                pd.Timestamp(start) - pd.Timedelta("400D"), pd.Timestamp(end)
+                pd.Timestamp(start) - pd.Timedelta(days=400), pd.Timestamp(end)
             )
         ]
         price_frame["security_id"] = "SHARADAR:" + price_frame["permaticker"].astype(
@@ -98,6 +102,7 @@ class SharadarExportProvider:
             ["date", "security_id", "close", "volume"]
             + (["sharesbas"] if "sharesbas" in price_frame else [])
         ].rename(columns={"sharesbas": "shares_outstanding"})
+        price_frame["price_adjustment"] = "unadjusted"
 
         actions = pd.DataFrame(
             columns=["date", "security_id", "action_type", "value", "qualified"]

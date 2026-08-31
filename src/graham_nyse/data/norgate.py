@@ -47,10 +47,12 @@ class NorgateExportProvider:
 
         master["security_id"] = "NORGATE:" + master["asset_id"].astype(str)
         master = master.drop(columns=["asset_id"])
+        master["identifier_type"] = "asset_id"
+        master["identifier_quality"] = "provider_permanent"
         prices["date"] = pd.to_datetime(prices["date"])
         prices = prices.loc[
             prices["date"].between(
-                pd.Timestamp(start) - pd.Timedelta("400D"), pd.Timestamp(end)
+                pd.Timestamp(start) - pd.Timedelta(days=400), pd.Timestamp(end)
             )
         ].copy()
         prices["security_id"] = "NORGATE:" + prices["asset_id"].astype(str)
@@ -58,6 +60,7 @@ class NorgateExportProvider:
             ["date", "security_id", "close", "volume"]
             + (["shares_outstanding"] if "shares_outstanding" in prices else [])
         ]
+        prices["price_adjustment"] = "unadjusted"
         actions["security_id"] = "NORGATE:" + actions["asset_id"].astype(str)
         actions["action_type"] = actions["action_type"].astype(str).str.upper()
         actions["qualified"] = actions.get("qualified", False)

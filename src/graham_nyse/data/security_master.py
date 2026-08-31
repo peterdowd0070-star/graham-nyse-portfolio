@@ -172,6 +172,8 @@ def security_master_from_crsp(
     out["ticker"] = out["TICKER"]
     out["exchange"] = "NYSE"
     out["security_type"] = "common_stock"
+    out["identifier_type"] = "permno"
+    out["identifier_quality"] = "provider_permanent"
     out["listing_start"] = out["NAMEDT"]
     out["listing_end"] = out["NAMEENDT"]
     delisting_date = pd.to_datetime(out["DLSTDT"], errors="coerce")
@@ -179,5 +181,9 @@ def security_master_from_crsp(
     out["delisting_return"] = pd.to_numeric(out["DLRET"], errors="coerce")
     # A CRSP name interval ending is not itself a delisting; only DLSTDT closes
     # the permanent security record.
-    columns = sorted(REQUIRED_SECURITY_COLUMNS) + ["is_delisted"]
+    columns = sorted(REQUIRED_SECURITY_COLUMNS) + [
+        "is_delisted",
+        "identifier_type",
+        "identifier_quality",
+    ]
     return SecurityMaster.from_frame(out[columns])

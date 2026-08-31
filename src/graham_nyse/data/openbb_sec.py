@@ -44,9 +44,7 @@ def normalize_openbb_pit_statement(
         "datetime64[ns, UTC]"
     )
     frame["period_end"] = (
-        pd.to_datetime(frame["period_end"])
-        .astype("datetime64[ns]")
-        .dt.normalize()
+        pd.to_datetime(frame["period_end"]).astype("datetime64[ns]").dt.normalize()
     )
     frame["security_id"] = str(security_id)
     if accession_column != "accession_number":

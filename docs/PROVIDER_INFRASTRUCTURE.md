@@ -29,7 +29,8 @@ graham-nyse infrastructure-doctor
 | Component | Purpose |
 |---|---|
 | DuckDB | SQL views over partitioned Parquet without copying licensed files |
-| Polars | Lazy scans and streaming transformations |
+| DuckDB lazy scan | Portable lazy Parquet collection used by default |
+| Polars | Optional native lazy scans when the installed wheel is CPU-compatible |
 | Pandera | Runtime validation of canonical provider contracts |
 | exchange-calendars | NYSE sessions and holiday handling |
 | Tenacity | Bounded retry policy for transient source failures |
@@ -39,8 +40,9 @@ graham-nyse infrastructure-doctor
 | Linearmodels | Panel and cross-sectional research extensions |
 
 `HistoricalLake` registers every matching canonical Parquet file under a root
-as a DuckDB view. This supports large, partitioned panels without loading the
-entire ten-year dataset into pandas.
+as a DuckDB view. `scan_prices()` uses a portable DuckDB lazy wrapper;
+`scan_prices_polars()` is an explicit opt-in. This avoids making an incompatible
+native Polars wheel a hard failure for the historical pipeline.
 
 ## Sharadar fallback
 
@@ -96,3 +98,6 @@ EDGAR archives remain the canonical filing source.
 - Current ticker lists cannot initialize historical membership.
 - Adjusted prices cannot be combined with separately processed distributions.
 - Missing terminal returns or point-in-time metadata stop publication.
+
+See [OPEN_DATA_RESEARCH.md](OPEN_DATA_RESEARCH.md) for the Alpha Vantage and
+Yahoo research adapters and the dataset-level certification command.

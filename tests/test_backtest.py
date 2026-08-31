@@ -33,6 +33,7 @@ def test_historical_engine_uses_vintages_and_monthly_updates():
     ).all()
     assert result.metadata["uses_current_constituent_list"] is False
     assert result.metadata["uses_adjusted_prices"] is False
+    assert result.metadata["publication_status"] == "simulation_only"
     assert "delisting" in set(result.trades["run_type"])
 
 
@@ -56,3 +57,23 @@ def test_all_four_scenarios_by_all_six_weight_strategies():
         "quality_value",
     }
     assert set(matrix["weighting_strategy"]) == set(cfg.portfolio.weighting_strategies)
+
+
+def test_portfolio_funded_taxes_never_create_implicit_borrowing():
+    cfg = load_config("config/strategy.yaml")
+    frames = build_smoke_frames()
+    result = run_historical_backtest(
+        frames["filing_vintages"],
+        frames["security_master"],
+        frames["prices"],
+        cfg,
+        "2016-07-01",
+        "2018-06-29",
+        scenario="quality_value",
+        weighting_strategy="equal",
+        tax_mode="taxable_fifo_no_liquidation",
+        tax_payment_source="portfolio",
+        corporate_actions=frames["corporate_actions"],
+    )
+    assert result.nav["cash"].ge(-cfg.validation.nav_tolerance).all()
+    assert "negative_cash_from_tax_or_execution" not in result.audit["errors"]

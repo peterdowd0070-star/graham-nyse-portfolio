@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 
 import pandas as pd
@@ -236,6 +237,12 @@ class TaxLedger:
             }
         )
         return tax
+
+    def estimate_year_tax(self, year: int) -> float:
+        """Return the current liability without mutating lots, carryforwards or events."""
+        if not self.enabled:
+            return 0.0
+        return copy.deepcopy(self).settle_year(year)
 
     def lot_frame(self) -> pd.DataFrame:
         rows = [

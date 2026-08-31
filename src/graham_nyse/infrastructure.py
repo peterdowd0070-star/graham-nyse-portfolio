@@ -100,7 +100,15 @@ class HistoricalLake:
             )
         return connection
 
-    def scan_prices(self) -> Any:
+    def scan_prices(self) -> DuckDBLazyScan:
+        """Return a portable lazy price scan without importing CPU-specific wheels."""
+        paths = [str(path) for path in self.root.rglob("raw_prices.parquet")]
+        if not paths:
+            raise FileNotFoundError(f"No raw_prices.parquet under {self.root}")
+        return DuckDBLazyScan(paths)
+
+    def scan_prices_polars(self) -> Any:
+        """Opt in to a native Polars LazyFrame when the installed wheel is compatible."""
         try:
             import polars as pl
         except ImportError as exc:
@@ -111,3 +119,33 @@ class HistoricalLake:
         if not paths:
             raise FileNotFoundError(f"No raw_prices.parquet under {self.root}")
         return pl.scan_parquet(paths)
+
+
+@dataclass(frozen=True)
+class CollectedTable:
+    frame: pd.DataFrame
+
+    @property
+    def height(self) -> int:
+        return len(self.frame)
+
+    def to_pandas(self) -> pd.DataFrame:
+        return self.frame.copy()
+
+
+@dataclass(frozen=True)
+class DuckDBLazyScan:
+    paths: list[str]
+
+    def collect(self) -> CollectedTable:
+        try:
+            import duckdb
+        except ImportError as exc:
+            raise RuntimeError(
+                "Install DuckDB with pip install -e '.[infrastructure]'"
+            ) from exc
+        escaped = ", ".join("'" + path.replace("'", "''") + "'" for path in self.paths)
+        frame = duckdb.sql(
+            f"select * from read_parquet([{escaped}], union_by_name=true)"
+        ).df()
+        return CollectedTable(frame)

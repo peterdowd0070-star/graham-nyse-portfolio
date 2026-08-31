@@ -45,6 +45,8 @@ Every scenario is tested with equal, score-proportional, inverse-volatility, sco
 
 The taxable modes maintain lots, holding periods, qualified and ordinary dividends, short- and long-term netting, loss carryforwards, and wash-sale basis adjustments. Tax rates are configurable assumptions, not individualized tax advice.
 Tax payment source is independently configurable as portfolio cash or external cash; external payments are deducted in the reported after-tax total-wealth metric.
+Portfolio-funded taxes are raised through explicit recorded sales. Negative
+cash is not treated as free borrowing.
 
 ## Install
 
@@ -121,6 +123,12 @@ are never committed to this repository.
 Alternative provider adapters and the DuckDB/Polars/Pandera research layer are
 documented in [PROVIDER_INFRASTRUCTURE.md](docs/PROVIDER_INFRASTRUCTURE.md).
 
+The audited Alpha Vantage/Yahoo/SEC research path, source comparison and hard
+empirical certification gate are documented in
+[OPEN_DATA_RESEARCH.md](docs/OPEN_DATA_RESEARCH.md).
+
 ## Evidence status
 
 The engine can produce an empirical result only when supplied with a survivorship-free historical security master, delisting returns, raw security returns and corporate actions, immutable SEC filing vintages, historical classifications, benchmarks, and factor returns. The included fixtures validate software only.
+Every run manifest records `publication_status`; open-data fallbacks are not
+silently promoted to empirical evidence.

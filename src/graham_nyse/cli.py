@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import cast
 
+import pandas as pd
 import typer
 
 from graham_nyse.backtest.data import load_table
@@ -11,6 +12,98 @@ from graham_nyse.backtest.engine import run_experiment_matrix, run_historical_ba
 from graham_nyse.config import WeightStrategy, load_config
 
 app = typer.Typer(no_args_is_help=True)
+
+
+@app.command("open-data-audit")
+def open_data_audit_command() -> None:
+    import importlib.util
+
+    from graham_nyse.data.open_data import OPEN_DATA_SOURCE_AUDIT
+
+    libraries = {
+        name: "available" if importlib.util.find_spec(name) else "not installed"
+        for name in ("yfinance", "simfin", "openbb", "pandas_datareader")
+    }
+    typer.echo(
+        json.dumps(
+            {"libraries": libraries, "sources": OPEN_DATA_SOURCE_AUDIT}, indent=2
+        )
+    )
+
+
+@app.command("acquire-alpha-listings")
+def acquire_alpha_listings_command(
+    as_of: list[str] = typer.Option(  # noqa: B008
+        ..., "--as-of", help="Repeatable YYYY-MM-DD"
+    ),
+    output: str = typer.Option("data/raw/alpha_vantage/listing_snapshots.parquet"),
+    api_key: str | None = typer.Option(None, envvar="ALPHA_VANTAGE_API_KEY"),
+    refresh: bool = typer.Option(False),
+) -> None:
+    from graham_nyse.data.open_data import AlphaVantageListingClient
+
+    client = AlphaVantageListingClient(api_key=api_key)
+    frames = [
+        client.fetch_snapshot(day, state, refresh)
+        for day in as_of
+        for state in ("active", "delisted")
+    ]
+    target = Path(output)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    pd_frame = pd.concat(frames, ignore_index=True)
+    pd_frame.to_parquet(target, index=False)
+    typer.echo(str(target))
+
+
+@app.command("acquire-yahoo-research")
+def acquire_yahoo_research_command(
+    security_master: str = typer.Option(..., help="Research security master"),
+    start: str = typer.Option(...),
+    end: str = typer.Option(...),
+    output: str = typer.Option("data/derived/yahoo_research"),
+) -> None:
+    from graham_nyse.data.certification import certify_historical_data
+    from graham_nyse.data.open_data import YahooResearchProvider
+
+    bundle = YahooResearchProvider(load_table(security_master)).load(start, end)
+    paths = bundle.write(output)
+    report = certify_historical_data(
+        bundle.security_master, bundle.prices, bundle.corporate_actions
+    )
+    target = Path(output, "data_certification.json")
+    target.write_text(json.dumps(report.as_dict(), indent=2), encoding="utf-8")
+    typer.echo(
+        json.dumps(
+            {
+                "paths": {key: str(value) for key, value in paths.items()},
+                "certification": report.as_dict(),
+            },
+            indent=2,
+        )
+    )
+
+
+@app.command("certify-historical-data")
+def certify_historical_data_command(
+    security_master: str = typer.Option(...),
+    prices: str = typer.Option(...),
+    corporate_actions: str = typer.Option(...),
+    filing_vintages: str | None = typer.Option(None),
+    require_empirical: bool = typer.Option(
+        False, help="Exit non-zero unless every empirical control passes"
+    ),
+) -> None:
+    from graham_nyse.data.certification import certify_historical_data
+
+    report = certify_historical_data(
+        load_table(security_master),
+        load_table(prices),
+        load_table(corporate_actions),
+        load_table(filing_vintages) if filing_vintages else None,
+    )
+    typer.echo(json.dumps(report.as_dict(), indent=2))
+    if require_empirical and not report.empirical_results_allowed:
+        raise typer.Exit(code=2)
 
 
 @app.command("infrastructure-doctor")
@@ -28,6 +121,9 @@ def infrastructure_doctor_command() -> None:
         "structlog",
         "tenacity",
         "openbb",
+        "yfinance",
+        "simfin",
+        "pandas_datareader",
     ]
     status = {
         module: "available" if importlib.util.find_spec(module) else "not installed"

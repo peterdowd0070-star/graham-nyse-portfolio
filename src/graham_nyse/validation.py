@@ -141,7 +141,20 @@ def validate_historical_run(
     if not trades.empty and (trades["transaction_cost"] < 0).any():
         errors.append("negative_transaction_cost")
     if (nav["cash"] < -cfg.validation.nav_tolerance).any():
-        warnings.append("negative_cash_from_tax_or_execution")
+        errors.append("negative_cash_from_tax_or_execution")
+    if not holdings.empty:
+        if (
+            holdings["weight"]
+            > cfg.portfolio.max_position_weight + cfg.validation.nav_tolerance
+        ).any():
+            errors.append("realized_position_cap_exceeded")
+        if "sector" in holdings:
+            sector_weights = holdings.groupby(["date", "sector"])["weight"].sum()
+            if (
+                sector_weights
+                > cfg.portfolio.max_sector_weight + cfg.validation.nav_tolerance
+            ).any():
+                errors.append("realized_sector_cap_exceeded")
     decision_times = pd.to_datetime(
         snapshots.get("decision_at", pd.Series(dtype=str)), utc=True
     ).dt.tz_convert(None)

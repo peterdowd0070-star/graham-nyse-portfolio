@@ -54,7 +54,7 @@ def extract_crsp(
     """
     tables = tables or CrspTables()
     start_date, end_date = _iso_date(start), _iso_date(end)
-    warmup = (pd.Timestamp(start_date) - pd.Timedelta("400D")).strftime("%Y-%m-%d")
+    warmup = (pd.Timestamp(start_date) - pd.Timedelta(days=400)).strftime("%Y-%m-%d")
     msf = _table(tables.monthly_stock)
     names_table = _table(tables.stock_names)
     delist_table = _table(tables.delistings)
@@ -150,6 +150,7 @@ def extract_crsp(
             "vendor_price_return",
         ]
     ]
+    raw_prices["price_adjustment"] = "unadjusted"
 
     action_rows: list[dict[str, Any]] = []
     for row in distributions.itertuples(index=False):
