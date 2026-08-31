@@ -46,3 +46,18 @@ def test_crsp_adapter_keeps_inactive_nyse_common_stock():
     master = security_master_from_crsp(names, delistings, classifications)
     assert "CRSP:10001" in set(master.active_as_of("2018-02-28")["security_id"])
     assert master.active_as_of("2018-03-02").empty
+
+
+def test_security_master_supports_non_overlapping_name_intervals():
+    frames = build_smoke_frames()
+    row = frames["security_master"].iloc[0].copy()
+    row["listing_end"] = "2017-12-31"
+    row["is_delisted"] = False
+    replacement = row.copy()
+    replacement["ticker"] = "RENAMED"
+    replacement["listing_start"] = "2018-01-01"
+    replacement["listing_end"] = pd.NaT
+    replacement["is_delisted"] = False
+    master = SecurityMaster.from_frame(pd.DataFrame([row, replacement]))
+    assert master.active_as_of("2017-06-01").iloc[0]["ticker"] != "RENAMED"
+    assert master.active_as_of("2018-06-01").iloc[0]["ticker"] == "RENAMED"

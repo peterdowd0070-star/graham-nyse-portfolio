@@ -2,14 +2,17 @@
 
 ## Security master
 
-One immutable row per permanent security identifier:
+One immutable row per non-overlapping dated security-history interval:
 
 ~~~text
 security_id, issuer_id, ticker, exchange, security_type, company_domain,
-sector, listing_start, listing_end, delisting_return
+sector, listing_start, listing_end, is_delisted, delisting_return
 ~~~
 
-Ticker is a dated label, not the primary key. Inactive and delisted securities remain in this table.
+`security_id` is permanent but may have many dated rows. Ticker, exchange,
+share class, SIC and company domain are interval attributes. `is_delisted` is
+true only for a terminal delisting interval; an ordinary name-history interval
+ending is not a delisting. Inactive and delisted securities remain in this table.
 
 ## Filing vintages
 

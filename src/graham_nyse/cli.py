@@ -13,6 +13,43 @@ from graham_nyse.config import WeightStrategy, load_config
 app = typer.Typer(no_args_is_help=True)
 
 
+@app.command("acquire-wrds")
+def acquire_wrds_command(
+    start: str = typer.Option(..., help="Research start date YYYY-MM-DD"),
+    end: str = typer.Option(..., help="Research end date YYYY-MM-DD"),
+    output: str = typer.Option("data/derived/wrds", help="Gitignored output path"),
+    username: str | None = typer.Option(
+        None, envvar="WRDS_USERNAME", help="WRDS username; password is never a CLI option"
+    ),
+) -> None:
+    from graham_nyse.data.wrds import connect_wrds, extract_crsp
+
+    connection = connect_wrds(username)
+    paths = extract_crsp(connection, start, end, output)
+    typer.echo(json.dumps({key: str(value) for key, value in paths.items()}, indent=2))
+
+
+@app.command("acquire-sec-vintages")
+def acquire_sec_vintages_command(
+    identifier_links: str = typer.Option(..., help="WRDS CRSP/Compustat link history"),
+    start: str = typer.Option(...),
+    end: str = typer.Option(...),
+    output: str = typer.Option("data/derived/sec"),
+    user_agent: str = typer.Option(..., envvar="SEC_USER_AGENT"),
+    refresh: bool = typer.Option(False),
+    maximum_issuers: int | None = typer.Option(
+        None, help="Optional smoke-test limit; omit for the full universe"
+    ),
+) -> None:
+    from graham_nyse.data.sec_vintages import acquire_sec_filing_vintages
+
+    target = acquire_sec_filing_vintages(
+        load_table(identifier_links), output, user_agent=user_agent,
+        start=start, end=end, refresh=refresh, maximum_issuers=maximum_issuers,
+    )
+    typer.echo(str(target))
+
+
 @app.command("run")
 def run_command(
     config: str = typer.Option("config/strategy.yaml", help="Strategy YAML path"),

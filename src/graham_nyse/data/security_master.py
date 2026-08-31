@@ -41,8 +41,18 @@ class SecurityMaster:
         out["delisting_return"] = pd.to_numeric(
             out["delisting_return"], errors="coerce"
         )
-        if out["security_id"].duplicated().any():
-            raise ValueError("security_id must be unique and permanent")
+        interval_key = ["security_id", "listing_start", "listing_end"]
+        if out.duplicated(interval_key).any():
+            raise ValueError("security history contains duplicate dated intervals")
+        for security_id, history in out.groupby("security_id"):
+            ordered = history.sort_values("listing_start")
+            previous_end: pd.Timestamp | None = None
+            for row in ordered.itertuples(index=False):
+                if previous_end is not None and row.listing_start <= previous_end:
+                    raise ValueError(
+                        f"security history intervals overlap for {security_id}"
+                    )
+                previous_end = row.listing_end if pd.notna(row.listing_end) else None
         invalid_domains = set(out["company_domain"].dropna()) - VALID_DOMAINS
         if invalid_domains:
             raise ValueError(f"Unsupported company domains: {sorted(invalid_domains)}")
@@ -50,7 +60,13 @@ class SecurityMaster:
             out["listing_end"].notna() & (out["listing_end"] < out["listing_start"])
         ).any():
             raise ValueError("listing_end precedes listing_start")
-        return cls(out.sort_values("security_id").reset_index(drop=True))
+        if "is_delisted" not in out:
+            # Backward compatibility for the original one-row security contract.
+            out["is_delisted"] = out["listing_end"].notna()
+        out["is_delisted"] = out["is_delisted"].fillna(False).astype(bool)
+        return cls(
+            out.sort_values(["security_id", "listing_start"]).reset_index(drop=True)
+        )
 
     def active_as_of(
         self, as_of: str | pd.Timestamp, exchange: str = "NYSE"
@@ -69,7 +85,7 @@ class SecurityMaster:
         return self.frame.loc[self.frame["listing_end"].eq(target)].copy()
 
     def require_complete_delisting_returns(self) -> list[str]:
-        inactive = self.frame["listing_end"].notna()
+        inactive = self.frame["is_delisted"]
         missing = self.frame.loc[
             inactive & ~np.isfinite(self.frame["delisting_return"]), "security_id"
         ]
@@ -126,21 +142,14 @@ def security_master_from_crsp(
         raise ValueError(f"CRSP stock-name history is missing: {sorted(missing)}")
     if missing := delist_required - set(delistings):
         raise ValueError(f"CRSP delistings are missing: {sorted(missing)}")
-    if missing := class_required - set(classifications):
+    has_dated_classification = {"company_domain", "sector"}.issubset(stock_names)
+    if not has_dated_classification and (missing := class_required - set(classifications)):
         raise ValueError(f"CRSP classifications are missing: {sorted(missing)}")
     names = stock_names.loc[
         stock_names["EXCHCD"].eq(1) & stock_names["SHRCD"].isin([10, 11])
     ].copy()
-    names = (
-        names.sort_values(["PERMNO", "NAMEENDT"])
-        .groupby("PERMNO", as_index=False)
-        .agg(
-            PERMCO=("PERMCO", "last"),
-            TICKER=("TICKER", "last"),
-            listing_start=("NAMEDT", "min"),
-            listing_end_name=("NAMEENDT", "max"),
-        )
-    )
+    names["NAMEDT"] = pd.to_datetime(names["NAMEDT"], errors="raise")
+    names["NAMEENDT"] = pd.to_datetime(names["NAMEENDT"], errors="coerce")
     latest_delisting = (
         delistings.sort_values(["PERMNO", "DLSTDT"])
         .groupby("PERMNO", as_index=False)
@@ -149,20 +158,24 @@ def security_master_from_crsp(
     out = names.merge(
         latest_delisting[["PERMNO", "DLSTDT", "DLRET"]], on="PERMNO", how="left"
     )
-    out = out.merge(
-        classifications[list(class_required)],
-        on="PERMNO",
-        how="left",
-        validate="one_to_one",
-    )
+    if not has_dated_classification:
+        out = out.merge(
+            classifications[list(class_required)],
+            on="PERMNO",
+            how="left",
+            validate="many_to_one",
+        )
     out["security_id"] = "CRSP:" + out["PERMNO"].astype(int).astype(str)
     out["issuer_id"] = "CRSPCO:" + out["PERMCO"].astype(int).astype(str)
     out["ticker"] = out["TICKER"]
     out["exchange"] = "NYSE"
     out["security_type"] = "common_stock"
-    out["listing_end"] = pd.to_datetime(out["DLSTDT"], errors="coerce")
+    out["listing_start"] = out["NAMEDT"]
+    out["listing_end"] = out["NAMEENDT"]
+    delisting_date = pd.to_datetime(out["DLSTDT"], errors="coerce")
+    out["is_delisted"] = delisting_date.eq(out["listing_end"])
     out["delisting_return"] = pd.to_numeric(out["DLRET"], errors="coerce")
     # A CRSP name interval ending is not itself a delisting; only DLSTDT closes
     # the permanent security record.
-    columns = sorted(REQUIRED_SECURITY_COLUMNS)
+    columns = sorted(REQUIRED_SECURITY_COLUMNS) + ["is_delisted"]
     return SecurityMaster.from_frame(out[columns])

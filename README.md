@@ -92,6 +92,10 @@ The generated fixture is named a **simulation smoke test**. It verifies event ti
 
 See [DATA_CONTRACTS.md](docs/DATA_CONTRACTS.md) and [SIMULATION_SMOKE_TEST.md](docs/SIMULATION_SMOKE_TEST.md).
 
+For the authenticated CRSP/WRDS and public SEC pipeline, see
+[REAL_DATA_ACQUISITION.md](docs/REAL_DATA_ACQUISITION.md). Licensed observations
+are never committed to this repository.
+
 ## Evidence status
 
 The engine can produce an empirical result only when supplied with a survivorship-free historical security master, delisting returns, raw security returns and corporate actions, immutable SEC filing vintages, historical classifications, benchmarks, and factor returns. The included fixture validates software only.

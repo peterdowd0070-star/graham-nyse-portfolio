@@ -12,6 +12,7 @@ import pandas as pd
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers_exchange.json"
 SEC_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
+SEC_SUBMISSION_FILE_URL = "https://data.sec.gov/submissions/{name}"
 
 
 class SecClient:
@@ -61,6 +62,28 @@ class SecClient:
             f"submissions_{int(cik):010d}.json",
             refresh,
         )
+
+    def submissions_all(self, cik: int, refresh: bool = False) -> dict[str, Any]:
+        """Return recent and archived submission metadata as one immutable list."""
+        payload = self.submissions(cik, refresh)
+        recent = pd.DataFrame(payload.get("filings", {}).get("recent", {}))
+        pieces = [recent] if not recent.empty else []
+        for descriptor in payload.get("filings", {}).get("files", []):
+            name = descriptor.get("name")
+            if not name:
+                continue
+            archive = self._get_json(
+                SEC_SUBMISSION_FILE_URL.format(name=name), name, refresh
+            )
+            frame = pd.DataFrame(archive)
+            if not frame.empty:
+                pieces.append(frame)
+        combined = pd.concat(pieces, ignore_index=True) if pieces else pd.DataFrame()
+        if not combined.empty and "accessionNumber" in combined:
+            combined = combined.drop_duplicates("accessionNumber", keep="first")
+        result = dict(payload)
+        result["filings"] = {"recent": combined.to_dict(orient="list"), "files": []}
+        return result
 
 
 def build_nyse_universe(

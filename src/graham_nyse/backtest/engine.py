@@ -312,7 +312,8 @@ def run_historical_backtest(
     previous_cutoff = initial.decision_at
 
     delisting_schedule: dict[pd.Timestamp, list[pd.Series]] = {}
-    for _, record in master.frame.loc[master.frame["listing_end"].notna()].iterrows():
+    terminal_rows = master.frame.loc[master.frame["is_delisted"]]
+    for _, record in terminal_rows.iterrows():
         candidates = dates[dates >= record["listing_end"]]
         if len(candidates):
             delisting_schedule.setdefault(candidates[0], []).append(record)
