@@ -22,6 +22,18 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.3", "ruff>=0.6", "mypy>=1.11,<2.0", "types-PyYAML>=6.0"]
 data = ["wrds>=3.3", "psycopg2-binary>=2.9"]
+infrastructure = [
+  "cvxpy>=1.6",
+  "duckdb>=1.2",
+  "exchange-calendars>=4.8",
+  "linearmodels>=6.1",
+  "pandera>=0.23",
+  "polars>=1.24",
+  "statsmodels>=0.14",
+  "structlog>=25.1",
+  "tenacity>=9.0",
+]
+openbb = ["openbb>=4.4"]
 
 [project.scripts]
 graham-nyse = "graham_nyse.cli:app"

@@ -84,7 +84,7 @@ def build_smoke_frames() -> dict[str, pd.DataFrame]:
                 "accession_number": f"000000-{filing_index:02d}-{i:04d}",
                 "accepted_at": accepted_at,
                 "period_end": accepted_at.tz_localize(None).normalize()
-                - pd.Timedelta(days=45),
+                - pd.Timedelta("45D"),
                 "earnings_history_years": 10,
                 "positive_earnings_years": 9,
                 "normalized_net_income": ni,

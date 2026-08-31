@@ -96,6 +96,9 @@ For the authenticated CRSP/WRDS and public SEC pipeline, see
 [REAL_DATA_ACQUISITION.md](docs/REAL_DATA_ACQUISITION.md). Licensed observations
 are never committed to this repository.
 
+Alternative provider adapters and the DuckDB/Polars/Pandera research layer are
+documented in [PROVIDER_INFRASTRUCTURE.md](docs/PROVIDER_INFRASTRUCTURE.md).
+
 ## Evidence status
 
 The engine can produce an empirical result only when supplied with a survivorship-free historical security master, delisting returns, raw security returns and corporate actions, immutable SEC filing vintages, historical classifications, benchmarks, and factor returns. The included fixture validates software only.

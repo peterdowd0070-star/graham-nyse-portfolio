@@ -142,7 +142,7 @@ class TaxLedger:
             if self.enabled and gain < 0:
                 loss_per_share = -gain / sold
                 unmatched = sold
-                lower = day - pd.Timedelta(days=self.cfg.wash_sale_days)
+                lower = day - pd.Timedelta(self.cfg.wash_sale_days, unit="D")
                 for replacement in lots:
                     if (
                         replacement is lot
@@ -161,7 +161,7 @@ class TaxLedger:
                     self.wash_windows.append(
                         WashSaleWindow(
                             security_id,
-                            day + pd.Timedelta(days=self.cfg.wash_sale_days),
+                            day + pd.Timedelta(self.cfg.wash_sale_days, unit="D"),
                             unmatched,
                             loss_per_share,
                             day.year,

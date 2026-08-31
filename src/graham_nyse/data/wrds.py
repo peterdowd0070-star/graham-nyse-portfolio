@@ -54,7 +54,7 @@ def extract_crsp(
     """
     tables = tables or CrspTables()
     start_date, end_date = _iso_date(start), _iso_date(end)
-    warmup = (pd.Timestamp(start_date) - pd.Timedelta(days=400)).strftime("%Y-%m-%d")
+    warmup = (pd.Timestamp(start_date) - pd.Timedelta("400D")).strftime("%Y-%m-%d")
     msf = _table(tables.monthly_stock)
     names_table = _table(tables.stock_names)
     delist_table = _table(tables.delistings)
@@ -139,44 +139,72 @@ def extract_crsp(
             "RET": "vendor_total_return",
             "RETX": "vendor_price_return",
         }
-    )[[
-        "date", "security_id", "close", "volume", "shares_outstanding",
-        "vendor_total_return", "vendor_price_return",
-    ]]
+    )[
+        [
+            "date",
+            "security_id",
+            "close",
+            "volume",
+            "shares_outstanding",
+            "vendor_total_return",
+            "vendor_price_return",
+        ]
+    ]
 
     action_rows: list[dict[str, Any]] = []
     for row in distributions.itertuples(index=False):
         security_id = f"CRSP:{int(row.PERMNO)}"
         if pd.notna(row.DIVAMT) and float(row.DIVAMT) != 0:
             action_rows.append(
-                {"date": row.EXDT, "security_id": security_id,
-                 "action_type": "DIVIDEND", "value": float(row.DIVAMT),
-                 "qualified": False, "distcd": row.DISTCD}
+                {
+                    "date": row.EXDT,
+                    "security_id": security_id,
+                    "action_type": "DIVIDEND",
+                    "value": float(row.DIVAMT),
+                    "qualified": False,
+                    "distcd": row.DISTCD,
+                }
             )
         split_factor = row.FACSHR if pd.notna(row.FACSHR) else row.FACPR
         if pd.notna(split_factor) and float(split_factor) != 0:
             action_rows.append(
-                {"date": row.EXDT, "security_id": security_id,
-                 "action_type": "SPLIT", "value": 1.0 + float(split_factor),
-                 "qualified": False, "distcd": row.DISTCD}
+                {
+                    "date": row.EXDT,
+                    "security_id": security_id,
+                    "action_type": "SPLIT",
+                    "value": 1.0 + float(split_factor),
+                    "qualified": False,
+                    "distcd": row.DISTCD,
+                }
             )
     actions = pd.DataFrame(
         action_rows,
         columns=["date", "security_id", "action_type", "value", "qualified", "distcd"],
     )
     benchmark = indexes.rename(
-        columns={"DATE": "date", "VWRETD": "CRSP_VW", "EWRETD": "CRSP_EW", "SPRTRN": "SP500"}
+        columns={
+            "DATE": "date",
+            "VWRETD": "CRSP_VW",
+            "EWRETD": "CRSP_EW",
+            "SPRTRN": "SP500",
+        }
     ).melt(id_vars="date", var_name="benchmark", value_name="total_return")
     identifier_links = identifier_links.rename(
         columns={
-            "PERMNO": "permno", "GVKEY": "gvkey", "CIK": "cik",
-            "LINKDT": "valid_from", "LINKENDDT": "valid_to",
-            "LINKTYPE": "link_type", "LINKPRIM": "link_primary",
+            "PERMNO": "permno",
+            "GVKEY": "gvkey",
+            "CIK": "cik",
+            "LINKDT": "valid_from",
+            "LINKENDDT": "valid_to",
+            "LINKTYPE": "link_type",
+            "LINKPRIM": "link_primary",
         }
     )
-    identifier_links["security_id"] = (
-        "CRSP:" + identifier_links["permno"].astype(int).astype(str)
-    )
+    identifier_links["security_id"] = "CRSP:" + identifier_links["permno"].astype(
+        int
+    ).astype(str)
+    for frame in (master, raw_prices, actions, benchmark, identifier_links):
+        frame["data_provider"] = "crsp"
 
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)

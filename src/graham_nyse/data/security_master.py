@@ -143,7 +143,9 @@ def security_master_from_crsp(
     if missing := delist_required - set(delistings):
         raise ValueError(f"CRSP delistings are missing: {sorted(missing)}")
     has_dated_classification = {"company_domain", "sector"}.issubset(stock_names)
-    if not has_dated_classification and (missing := class_required - set(classifications)):
+    if not has_dated_classification and (
+        missing := class_required - set(classifications)
+    ):
         raise ValueError(f"CRSP classifications are missing: {sorted(missing)}")
     names = stock_names.loc[
         stock_names["EXCHCD"].eq(1) & stock_names["SHRCD"].isin([10, 11])

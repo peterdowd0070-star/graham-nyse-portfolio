@@ -13,13 +13,92 @@ from graham_nyse.config import WeightStrategy, load_config
 app = typer.Typer(no_args_is_help=True)
 
 
+@app.command("infrastructure-doctor")
+def infrastructure_doctor_command() -> None:
+    import importlib.util
+
+    modules = [
+        "cvxpy",
+        "duckdb",
+        "exchange_calendars",
+        "linearmodels",
+        "pandera",
+        "polars",
+        "statsmodels",
+        "structlog",
+        "tenacity",
+        "openbb",
+    ]
+    status = {
+        module: "available" if importlib.util.find_spec(module) else "not installed"
+        for module in modules
+    }
+    typer.echo(json.dumps(status, indent=2))
+
+
+@app.command("normalize-sharadar")
+def normalize_sharadar_command(
+    tickers: str = typer.Option(..., help="Sharadar TICKERS CSV/Parquet"),
+    prices: str = typer.Option(..., help="SEP export enriched with PERMATICKER"),
+    actions: str | None = typer.Option(None, help="Optional ACTIONS export"),
+    start: str = typer.Option(...),
+    end: str = typer.Option(...),
+    output: str = typer.Option("data/derived/sharadar"),
+) -> None:
+    from graham_nyse.data.contracts import validate_canonical_bundle
+    from graham_nyse.data.provenance import write_source_manifest
+    from graham_nyse.data.sharadar import SharadarExportProvider
+
+    bundle = SharadarExportProvider(tickers, prices, actions).load(start, end)
+    validate_canonical_bundle(
+        bundle.security_master, bundle.prices, bundle.corporate_actions
+    )
+    paths = bundle.write(output)
+    write_source_manifest(
+        output,
+        source=bundle.provider,
+        parameters={"start": start, "end": end},
+        files=list(paths.values()),
+    )
+    typer.echo(json.dumps({key: str(value) for key, value in paths.items()}, indent=2))
+
+
+@app.command("normalize-norgate")
+def normalize_norgate_command(
+    security_history: str = typer.Option(...),
+    prices: str = typer.Option(...),
+    actions: str = typer.Option(...),
+    start: str = typer.Option(...),
+    end: str = typer.Option(...),
+    output: str = typer.Option("data/derived/norgate"),
+) -> None:
+    from graham_nyse.data.contracts import validate_canonical_bundle
+    from graham_nyse.data.norgate import NorgateExportProvider
+    from graham_nyse.data.provenance import write_source_manifest
+
+    bundle = NorgateExportProvider(security_history, prices, actions).load(start, end)
+    validate_canonical_bundle(
+        bundle.security_master, bundle.prices, bundle.corporate_actions
+    )
+    paths = bundle.write(output)
+    write_source_manifest(
+        output,
+        source=bundle.provider,
+        parameters={"start": start, "end": end},
+        files=list(paths.values()),
+    )
+    typer.echo(json.dumps({key: str(value) for key, value in paths.items()}, indent=2))
+
+
 @app.command("acquire-wrds")
 def acquire_wrds_command(
     start: str = typer.Option(..., help="Research start date YYYY-MM-DD"),
     end: str = typer.Option(..., help="Research end date YYYY-MM-DD"),
     output: str = typer.Option("data/derived/wrds", help="Gitignored output path"),
     username: str | None = typer.Option(
-        None, envvar="WRDS_USERNAME", help="WRDS username; password is never a CLI option"
+        None,
+        envvar="WRDS_USERNAME",
+        help="WRDS username; password is never a CLI option",
     ),
 ) -> None:
     from graham_nyse.data.wrds import connect_wrds, extract_crsp
@@ -44,8 +123,13 @@ def acquire_sec_vintages_command(
     from graham_nyse.data.sec_vintages import acquire_sec_filing_vintages
 
     target = acquire_sec_filing_vintages(
-        load_table(identifier_links), output, user_agent=user_agent,
-        start=start, end=end, refresh=refresh, maximum_issuers=maximum_issuers,
+        load_table(identifier_links),
+        output,
+        user_agent=user_agent,
+        start=start,
+        end=end,
+        refresh=refresh,
+        maximum_issuers=maximum_issuers,
     )
     typer.echo(str(target))
 

@@ -17,10 +17,40 @@ class FakeWrds:
         if "dsenames" in sql:
             return pd.DataFrame(
                 [
-                    [10001, 9001, "OLD", "Old Bank", 1, 10, 6021, "2010-01-01", "2018-03-01"],
-                    [10002, 9002, "REIT", "Old REIT", 1, 11, 6798, "2011-01-01", "2026-12-31"],
+                    [
+                        10001,
+                        9001,
+                        "OLD",
+                        "Old Bank",
+                        1,
+                        10,
+                        6021,
+                        "2010-01-01",
+                        "2018-03-01",
+                    ],
+                    [
+                        10002,
+                        9002,
+                        "REIT",
+                        "Old REIT",
+                        1,
+                        11,
+                        6798,
+                        "2011-01-01",
+                        "2026-12-31",
+                    ],
                 ],
-                columns=["permno", "permco", "ticker", "comnam", "exchcd", "shrcd", "siccd", "namedt", "nameendt"],
+                columns=[
+                    "permno",
+                    "permco",
+                    "ticker",
+                    "comnam",
+                    "exchcd",
+                    "shrcd",
+                    "siccd",
+                    "namedt",
+                    "nameendt",
+                ],
             )
         if "dsedelist" in sql:
             return pd.DataFrame(
@@ -30,12 +60,30 @@ class FakeWrds:
         if "from crsp.dsf" in sql:
             return pd.DataFrame(
                 [["2017-12-29", 10001, 10.0, 1000, 1_000_000, 0.01, 0.01]],
-                columns=["date", "permno", "close", "volume", "shares_outstanding", "ret", "retx"],
+                columns=[
+                    "date",
+                    "permno",
+                    "close",
+                    "volume",
+                    "shares_outstanding",
+                    "ret",
+                    "retx",
+                ],
             )
         if "dsedist" in sql:
             return pd.DataFrame(
                 [[10001, "2017-12-29", 1232, 0.25, None, None, None, None, None]],
-                columns=["permno", "exdt", "distcd", "divamt", "facpr", "facshr", "dclrdt", "rcrddt", "paydt"],
+                columns=[
+                    "permno",
+                    "exdt",
+                    "distcd",
+                    "divamt",
+                    "facpr",
+                    "facshr",
+                    "dclrdt",
+                    "rcrddt",
+                    "paydt",
+                ],
             )
         if "from crsp.dsi" in sql:
             return pd.DataFrame(
@@ -45,7 +93,15 @@ class FakeWrds:
         if "ccmxpf_linktable" in sql:
             return pd.DataFrame(
                 [[10001, "001000", 1234, "2010-01-01", None, "LC", "P"]],
-                columns=["permno", "gvkey", "cik", "linkdt", "linkenddt", "linktype", "linkprim"],
+                columns=[
+                    "permno",
+                    "gvkey",
+                    "cik",
+                    "linkdt",
+                    "linkenddt",
+                    "linktype",
+                    "linkprim",
+                ],
             )
         raise AssertionError(sql)
 

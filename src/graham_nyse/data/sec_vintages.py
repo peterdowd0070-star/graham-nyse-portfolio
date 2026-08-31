@@ -49,7 +49,7 @@ def acquire_sec_filing_vintages(
             accepted_naive = vintages["accepted_at"].dt.tz_convert(None)
             link_end = link.valid_to if pd.notna(link.valid_to) else pd.Timestamp.max
             keep = accepted_naive.between(
-                max(start_ts - pd.Timedelta(days=3660), link.valid_from),
+                max(start_ts - pd.Timedelta("3660D"), link.valid_from),
                 min(end_ts, link_end),
             )
             pieces.append(vintages.loc[keep])
@@ -62,7 +62,11 @@ def acquire_sec_filing_vintages(
     write_source_manifest(
         out,
         source="SEC EDGAR submissions and Company Facts",
-        parameters={"start": str(start_ts.date()), "end": str(end_ts.date()), "issuer_count": len(ciks)},
+        parameters={
+            "start": str(start_ts.date()),
+            "end": str(end_ts.date()),
+            "issuer_count": len(ciks),
+        },
         files=[target],
     )
     return target

@@ -96,6 +96,20 @@ def _validate_actions(actions: pd.DataFrame | None) -> pd.DataFrame:
     return out[columns].sort_values(["date", "security_id"]).reset_index(drop=True)
 
 
+def _validate_market_provider_consistency(*frames: pd.DataFrame | None) -> str | None:
+    providers: set[str] = set()
+    for frame in frames:
+        if frame is None or frame.empty or "data_provider" not in frame:
+            continue
+        providers.update(frame["data_provider"].dropna().astype(str).str.lower())
+    if len(providers) > 1:
+        raise ValueError(
+            "An empirical run may not splice market observations across providers: "
+            f"{sorted(providers)}"
+        )
+    return next(iter(providers)) if providers else None
+
+
 def _decision_kind(month: int, cfg: StrategyConfig) -> str:
     if month in cfg.schedule.full_reconstruction_months:
         return "full_reconstruction"
@@ -119,7 +133,7 @@ def _market_snapshot(
         raise ValueError(f"No price history is available at {decision_date.date()}")
     latest = history.groupby("security_id", as_index=False).tail(1)
     latest = latest.rename(columns={"close": "price"})
-    trailing = history.loc[history["date"].ge(decision_date - pd.Timedelta(days=400))]
+    trailing = history.loc[history["date"].ge(decision_date - pd.Timedelta("400D"))]
     trailing = trailing.copy()
     trailing["dollar_volume"] = trailing["close"] * trailing["volume"]
     liquidity = trailing.groupby("security_id")["dollar_volume"].apply(
@@ -249,13 +263,16 @@ def run_historical_backtest(
     benchmark_returns: pd.DataFrame | None = None,
     factor_returns: pd.DataFrame | None = None,
 ) -> BacktestResult:
+    market_provider = _validate_market_provider_consistency(
+        security_master, prices, corporate_actions, benchmark_returns
+    )
     store = FilingVintageStore.from_frame(filing_vintages)
     master = SecurityMaster.from_frame(security_master)
     price_frame = _validate_prices(prices)
     actions = _validate_actions(corporate_actions)
     start_ts, end_ts = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
     price_frame = price_frame.loc[
-        price_frame["date"].between(start_ts - pd.Timedelta(days=400), end_ts)
+        price_frame["date"].between(start_ts - pd.Timedelta("400D"), end_ts)
     ].copy()
     dates = pd.DatetimeIndex(
         sorted(
@@ -292,7 +309,7 @@ def run_historical_backtest(
     previous_cutoff: pd.Timestamp | None = None
 
     # Initial construction uses only information public before the first session.
-    initial_decision_date = dates[0] - pd.Timedelta(days=1)
+    initial_decision_date = dates[0] - pd.Timedelta("1D")
     initial, audit_row, score_frame = _build_decision(
         store,
         master,
@@ -601,6 +618,7 @@ def run_historical_backtest(
         "end": end_ts,
         "uses_current_constituent_list": False,
         "uses_adjusted_prices": False,
+        "market_data_provider": market_provider or "unspecified",
         "filing_availability_field": "accepted_at",
         "methodology_version": "1.0.0",
     }
