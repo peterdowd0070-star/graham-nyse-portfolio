@@ -15,8 +15,11 @@ The backtest does not apply today's portfolio to prior returns. It reconstructs 
 3. Merge raw prices and liquidity observations available by that date.
 4. Apply the accounting model for the company's domain and sector.
 5. Recalculate the selected strategy scenario and portfolio weights.
-6. Monitor every month, rebalance incumbents in March and September, and reconstruct in June and December.
-7. Process dividends, splits, delistings, transaction costs, tax lots, and annual tax settlements explicitly.
+6. Monitor every month and reconstruct the investable portfolio from the full dated NYSE universe in March, June, September, and December.
+7. Permit securities to enter, remain, or exit as listing status, filing vintages, eligibility, ranks, and portfolio constraints change.
+8. Process dividends, splits, delistings, transaction costs, tax lots, and annual tax settlements explicitly.
+
+No ticker list is hard-coded into portfolio construction. Holdings are outputs of the historical universe, information set, scenario, and weighting model at each reconstruction date.
 
 The old as_of_date feature-panel and adjusted-price interfaces have been removed because they could not prove filing availability, historical membership, or corporate-action treatment.
 
