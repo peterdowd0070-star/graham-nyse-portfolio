@@ -168,8 +168,8 @@ portfolio:
     - liquidity_adjusted_equal
 
 schedule:
-  quarterly_rebalance_months: [3, 9]
-  full_reconstruction_months: [6, 12]
+  quarterly_rebalance_months: []
+  full_reconstruction_months: [3, 6, 9, 12]
   monitor_monthly: true
 
 execution:
