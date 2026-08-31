@@ -85,6 +85,25 @@ graham-nyse experiment-matrix \
   --output outputs/scenario_weight_matrix
 ~~~
 
+## Run the self-contained evolving-universe matrix
+
+This command generates a deterministic ten-year point-in-time universe with new listings, delistings, delisting returns, dated filings, dividends, and changing ranks. It then runs every scenario and weighting strategy through the production historical engine.
+
+~~~bash
+PYTHONPATH=src:. python scripts/run_evolving_validation.py \
+  --tax-mode tax_deferred \
+  --output outputs/evolving_validation_10y
+~~~
+
+The command writes:
+
+- `scenario_weight_matrix.csv` for all 24 variants;
+- one complete result directory per scenario and weighting strategy;
+- generated input tables under `data/`;
+- `validation_manifest.json` with the evidence classification.
+
+This mode validates evolving portfolio behavior without requiring external licensed data. Its prices and fundamentals are generated and must not be presented as historical NYSE performance.
+
 ## Validation
 
 ~~~bash
@@ -104,4 +123,4 @@ documented in [PROVIDER_INFRASTRUCTURE.md](docs/PROVIDER_INFRASTRUCTURE.md).
 
 ## Evidence status
 
-The engine can produce an empirical result only when supplied with a survivorship-free historical security master, delisting returns, raw security returns and corporate actions, immutable SEC filing vintages, historical classifications, benchmarks, and factor returns. The included fixture validates software only.
+The engine can produce an empirical result only when supplied with a survivorship-free historical security master, delisting returns, raw security returns and corporate actions, immutable SEC filing vintages, historical classifications, benchmarks, and factor returns. The included fixtures validate software only.
