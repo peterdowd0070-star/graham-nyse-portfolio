@@ -25,7 +25,29 @@ graham-nyse open-data-audit
 
 ## Best-effort open stack
 
-With an Alpha Vantage key, collect both states at every reconstruction date:
+The executable default order is role-specific and can be inspected with:
+
+~~~bash
+graham-nyse free-source-plan
+~~~
+
+It prioritizes SEC EDGAR for filing vintages and terminal-event evidence,
+Alpha Vantage for dated active/delisted symbol snapshots, Nasdaq Trader for
+current exchange/security-type reconciliation, Yahoo for raw research prices
+and actions, and Stooq only as an independent price audit. Commercial sources
+are excluded unless `--include-commercial-fallbacks` is passed.
+
+Source priority never overrides certification. Yahoo and Stooq observations
+cannot be silently combined or substituted inside one return series.
+
+Archive the free current NYSE reference regularly:
+
+~~~bash
+graham-nyse acquire-nasdaq-reference \
+  --output data/raw/nasdaq_trader/otherlisted.parquet
+~~~
+
+With an Alpha Vantage key, individual dated snapshots can be collected with:
 
 ~~~bash
 export ALPHA_VANTAGE_API_KEY='...'
@@ -36,6 +58,25 @@ graham-nyse acquire-alpha-listings \
   --as-of 2017-06-30 \
   --output data/raw/alpha_vantage/listing_snapshots.parquet
 ~~~
+
+For the ten-year run, prefer the bounded acquisition command. It captures
+active membership before inception and at every June/December reconstruction,
+then makes one final delisted-catalog request:
+
+~~~bash
+graham-nyse acquire-open-listings \
+  --start 2016-07-01 --end 2026-06-30 \
+  --output data/raw/alpha_vantage/listing_snapshots.parquet
+~~~
+
+The complete public/free bootstrap is:
+
+~~~bash
+./scripts/acquire_real_data.sh 2016-07-01 2026-06-30
+~~~
+
+The former WRDS-specific workflow is retained only as the explicit commercial
+fallback at `scripts/acquire_wrds_data.sh`.
 
 After deterministic domain/sector classification, use
 `build_alpha_vantage_research_master`. It deliberately records
@@ -54,6 +95,15 @@ graham-nyse acquire-yahoo-research \
 The adapter requests `auto_adjust=False` and `actions=True`. Missing symbols are
 a hard error; they are not dropped. Yahoo rate limits, personal-use terms and
 unverified inactive-symbol retention make this a research route only.
+
+Stooq is available strictly as a cross-provider audit. A disagreement is
+reported and never patched into the Yahoo series:
+
+~~~bash
+graham-nyse audit-stooq-prices \
+  --primary-prices data/derived/yahoo_research/raw_prices.parquet \
+  --ticker IBM --start 2016-07-01 --end 2026-06-30
+~~~
 
 ## Certification
 

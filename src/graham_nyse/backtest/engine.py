@@ -134,7 +134,7 @@ def _market_snapshot(
         raise ValueError(f"No price history is available at {decision_date.date()}")
     latest = history.groupby("security_id", as_index=False).tail(1)
     latest = latest.rename(columns={"close": "price"})
-    trailing = history.loc[history["date"].ge(decision_date - pd.Timedelta(days=400))]
+    trailing = history.loc[history["date"].ge(decision_date - pd.offsets.Day(400))]
     trailing = trailing.copy()
     trailing["dollar_volume"] = trailing["close"] * trailing["volume"]
     liquidity = trailing.groupby("security_id")["dollar_volume"].apply(
@@ -273,7 +273,7 @@ def run_historical_backtest(
     actions = _validate_actions(corporate_actions)
     start_ts, end_ts = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
     price_frame = price_frame.loc[
-        price_frame["date"].between(start_ts - pd.Timedelta(days=400), end_ts)
+        price_frame["date"].between(start_ts - pd.offsets.Day(400), end_ts)
     ].copy()
     dates = pd.DatetimeIndex(
         sorted(
@@ -375,7 +375,7 @@ def run_historical_backtest(
         return current_cash
 
     # Initial construction uses only information public before the first session.
-    initial_decision_date = dates[0] - pd.Timedelta(days=1)
+    initial_decision_date = dates[0] - pd.offsets.Day(1)
     initial, audit_row, score_frame = _build_decision(
         store,
         master,

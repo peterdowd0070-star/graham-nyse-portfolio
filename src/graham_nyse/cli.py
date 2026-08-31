@@ -31,6 +31,57 @@ def open_data_audit_command() -> None:
     )
 
 
+@app.command("free-source-plan")
+def free_source_plan_command(
+    include_commercial_fallbacks: bool = typer.Option(
+        False, help="Show paid fallbacks after the free/public sources"
+    ),
+) -> None:
+    from graham_nyse.data.source_priority import source_plan_payload
+
+    typer.echo(
+        json.dumps(
+            source_plan_payload(no_commercial=not include_commercial_fallbacks),
+            indent=2,
+        )
+    )
+
+
+@app.command("acquire-nasdaq-reference")
+def acquire_nasdaq_reference_command(
+    output: str = typer.Option("data/raw/nasdaq_trader/otherlisted.parquet"),
+    refresh: bool = typer.Option(False),
+) -> None:
+    from graham_nyse.data.nasdaq_trader import NasdaqTraderClient
+
+    frame = NasdaqTraderClient().fetch_other_listed(refresh=refresh)
+    target = Path(output)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(target, index=False)
+    typer.echo(str(target))
+
+
+@app.command("audit-stooq-prices")
+def audit_stooq_prices_command(
+    primary_prices: str = typer.Option(...),
+    ticker: str = typer.Option(...),
+    start: str = typer.Option(...),
+    end: str = typer.Option(...),
+    relative_tolerance: float = typer.Option(0.02),
+    refresh: bool = typer.Option(False),
+) -> None:
+    from graham_nyse.data.stooq import StooqPriceAuditClient, audit_close_prices
+
+    primary = load_table(primary_prices)
+    audit = StooqPriceAuditClient().fetch_daily(ticker, start, end, refresh=refresh)
+    typer.echo(
+        json.dumps(
+            audit_close_prices(primary, audit, relative_tolerance=relative_tolerance),
+            indent=2,
+        )
+    )
+
+
 @app.command("acquire-alpha-listings")
 def acquire_alpha_listings_command(
     as_of: list[str] = typer.Option(  # noqa: B008
@@ -52,6 +103,45 @@ def acquire_alpha_listings_command(
     target.parent.mkdir(parents=True, exist_ok=True)
     pd_frame = pd.concat(frames, ignore_index=True)
     pd_frame.to_parquet(target, index=False)
+    typer.echo(str(target))
+
+
+@app.command("acquire-open-listings")
+def acquire_open_listings_command(
+    start: str = typer.Option(...),
+    end: str = typer.Option(...),
+    output: str = typer.Option("data/raw/alpha_vantage/listing_snapshots.parquet"),
+    api_key: str | None = typer.Option(None, envvar="ALPHA_VANTAGE_API_KEY"),
+    refresh: bool = typer.Option(False),
+) -> None:
+    from graham_nyse.data.open_data import (
+        AlphaVantageListingClient,
+        open_listing_snapshot_requests,
+    )
+
+    client = AlphaVantageListingClient(api_key=api_key)
+    requests = open_listing_snapshot_requests(start, end)
+    frames = [client.fetch_snapshot(day, state, refresh) for day, state in requests]
+    target = Path(output)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    pd.concat(frames, ignore_index=True).to_parquet(target, index=False)
+    typer.echo(json.dumps({"path": str(target), "requests": len(requests)}, indent=2))
+
+
+@app.command("acquire-sec-reference")
+def acquire_sec_reference_command(
+    output: str = typer.Option("data/raw/sec/company_tickers_exchange.parquet"),
+    user_agent: str = typer.Option(..., envvar="SEC_USER_AGENT"),
+    refresh: bool = typer.Option(False),
+) -> None:
+    from graham_nyse.data.sec import SecClient
+
+    frame = SecClient(user_agent, cache_dir=Path(output).parent).exchange_tickers(
+        refresh=refresh
+    )
+    target = Path(output)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(target, index=False)
     typer.echo(str(target))
 
 

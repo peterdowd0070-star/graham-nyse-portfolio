@@ -54,7 +54,7 @@ def extract_crsp(
     """
     tables = tables or CrspTables()
     start_date, end_date = _iso_date(start), _iso_date(end)
-    warmup = (pd.Timestamp(start_date) - pd.Timedelta(days=400)).strftime("%Y-%m-%d")
+    warmup = (pd.Timestamp(start_date) - pd.offsets.Day(400)).strftime("%Y-%m-%d")
     msf = _table(tables.monthly_stock)
     names_table = _table(tables.stock_names)
     delist_table = _table(tables.delistings)

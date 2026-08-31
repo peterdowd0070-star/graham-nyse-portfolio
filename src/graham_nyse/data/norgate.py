@@ -52,7 +52,7 @@ class NorgateExportProvider:
         prices["date"] = pd.to_datetime(prices["date"])
         prices = prices.loc[
             prices["date"].between(
-                pd.Timestamp(start) - pd.Timedelta(days=400), pd.Timestamp(end)
+                pd.Timestamp(start) - pd.offsets.Day(400), pd.Timestamp(end)
             )
         ].copy()
         prices["security_id"] = "NORGATE:" + prices["asset_id"].astype(str)

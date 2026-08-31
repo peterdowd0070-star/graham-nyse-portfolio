@@ -13,37 +13,50 @@ from graham_nyse.data.providers import HistoricalBundle
 
 OPEN_DATA_SOURCE_AUDIT = (
     {
+        "source": "SEC EDGAR",
+        "library": "httpx/direct API and bulk archives",
+        "role": "canonical filing vintages, issuer identity evidence and terminal-event filings",
+        "priority": 10,
+        "survivorship_free": False,
+        "reason": "authoritative filings do not themselves provide security returns",
+    },
+    {
         "source": "Alpha Vantage LISTING_STATUS",
         "library": "httpx/direct API",
         "role": "dated active and delisted symbol snapshots",
+        "priority": 10,
         "survivorship_free": False,
         "reason": "no CRSP-style permanent security ID or authoritative delisting return",
     },
     {
-        "source": "Yahoo Finance",
-        "library": "yfinance",
-        "role": "raw prices, dividends and splits for a supplied symbol list",
+        "source": "Nasdaq Trader Symbol Directory",
+        "library": "httpx/direct public file",
+        "role": "current NYSE exchange and security-type reference",
+        "priority": 10,
         "survivorship_free": False,
-        "reason": "not a historical universe/security master and inactive coverage is not guaranteed",
+        "reason": "current reference only; snapshots must be archived prospectively",
     },
     {
-        "source": "SEC EDGAR",
-        "library": "httpx/sec-api adapters",
-        "role": "filing vintages keyed by accession and acceptance time",
+        "source": "Yahoo Finance",
+        "library": "yfinance",
+        "role": "raw research prices, dividends and splits for a supplied symbol list",
+        "priority": 10,
         "survivorship_free": False,
-        "reason": "filings do not provide security returns or delisting returns",
+        "reason": "not a historical universe/security master and inactive coverage is not guaranteed",
     },
     {
         "source": "SimFin",
         "library": "simfin",
         "role": "normalized fundamentals and share prices",
+        "priority": 30,
         "survivorship_free": False,
         "reason": "public documentation does not certify complete historical NYSE membership and terminal returns",
     },
     {
         "source": "Stooq",
         "library": "direct download",
-        "role": "historical prices",
+        "role": "independent price audit, never silent price replacement",
+        "priority": 10,
         "survivorship_free": False,
         "reason": "no audited permanent-ID security master or delisting-return table",
     },
@@ -51,6 +64,7 @@ OPEN_DATA_SOURCE_AUDIT = (
         "source": "pandas-datareader",
         "library": "pandas-datareader",
         "role": "client library",
+        "priority": 99,
         "survivorship_free": False,
         "reason": "current maintained surface removed Yahoo, Stooq and other securities readers",
     },
@@ -58,6 +72,7 @@ OPEN_DATA_SOURCE_AUDIT = (
         "source": "OpenBB",
         "library": "openbb",
         "role": "provider aggregation and SEC reconciliation",
+        "priority": 40,
         "survivorship_free": False,
         "reason": "coverage and identity quality inherit from the selected upstream provider",
     },
@@ -65,6 +80,7 @@ OPEN_DATA_SOURCE_AUDIT = (
         "source": "WRDS/CRSP",
         "library": "wrds",
         "role": "permanent IDs, active/inactive histories, returns and delisting returns",
+        "priority": 90,
         "survivorship_free": True,
         "reason": "strict reference dataset; licensed rather than open",
     },
@@ -115,6 +131,26 @@ class AlphaVantageListingClient:
         frame["snapshot_date"] = pd.Timestamp(day)
         frame["requested_state"] = state
         return frame
+
+
+def open_listing_snapshot_requests(
+    start: str | pd.Timestamp, end: str | pd.Timestamp
+) -> list[tuple[pd.Timestamp, str]]:
+    """Use only the snapshots needed by the agreed semiannual reconstruction.
+
+    Active membership is captured immediately before the first session and at
+    each June/December reconstruction. One final delisted query supplies the
+    provider's exit catalog without doubling every historical request.
+    """
+
+    start_ts = pd.Timestamp(start).normalize()
+    end_ts = pd.Timestamp(end).normalize()
+    if end_ts < start_ts:
+        raise ValueError("end must be on or after start")
+    initial = start_ts - pd.offsets.Day(1)
+    semiannual = pd.date_range(initial, end_ts, freq="2QE-DEC").normalize()
+    active_dates = sorted({initial, *semiannual.tolist()})
+    return [(day, "active") for day in active_dates] + [(end_ts, "delisted")]
 
 
 def build_alpha_vantage_research_master(
@@ -204,7 +240,7 @@ class YahooResearchProvider:
             history = yf.download(
                 symbol,
                 start=start,
-                end=(pd.Timestamp(end) + pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
+                end=(pd.Timestamp(end) + pd.offsets.Day(1)).strftime("%Y-%m-%d"),
                 auto_adjust=False,
                 actions=True,
                 repair=False,

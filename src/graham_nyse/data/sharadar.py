@@ -92,7 +92,7 @@ class SharadarExportProvider:
         price_frame["date"] = pd.to_datetime(price_frame["date"])
         price_frame = price_frame.loc[
             price_frame["date"].between(
-                pd.Timestamp(start) - pd.Timedelta(days=400), pd.Timestamp(end)
+                pd.Timestamp(start) - pd.offsets.Day(400), pd.Timestamp(end)
             )
         ]
         price_frame["security_id"] = "SHARADAR:" + price_frame["permaticker"].astype(

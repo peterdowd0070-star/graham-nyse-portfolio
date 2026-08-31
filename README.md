@@ -127,6 +127,13 @@ The audited Alpha Vantage/Yahoo/SEC research path, source comparison and hard
 empirical certification gate are documented in
 [OPEN_DATA_RESEARCH.md](docs/OPEN_DATA_RESEARCH.md).
 
+The default source plan is public/free-first and role-specific. Paid providers
+are fallbacks only:
+
+~~~bash
+graham-nyse free-source-plan
+~~~
+
 ## Evidence status
 
 The engine can produce an empirical result only when supplied with a survivorship-free historical security master, delisting returns, raw security returns and corporate actions, immutable SEC filing vintages, historical classifications, benchmarks, and factor returns. The included fixtures validate software only.
