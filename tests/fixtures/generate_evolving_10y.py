@@ -58,7 +58,7 @@ def build_evolving_frames() -> dict[str, pd.DataFrame]:
         )
     master = pd.DataFrame(master_rows)
 
-    dates = pd.bdate_range(HISTORY_START, END + pd.Timedelta("2D"))
+    dates = pd.bdate_range(HISTORY_START, END + pd.offsets.Day(2))
     market_factor = rng.normal(0.00028, 0.0080, len(dates))
     price_rows: list[dict[str, object]] = []
     for i, security_id in enumerate(ids):
@@ -89,6 +89,8 @@ def build_evolving_frames() -> dict[str, pd.DataFrame]:
             pd.Timestamp(f"{year}-08-01 21:00:00", tz="UTC"),
         ]
         for filing_number, accepted_at in enumerate(accepted_dates):
+            if accepted_at > pd.Timestamp(END, tz="UTC"):
+                continue
             for i, security_id in enumerate(ids):
                 day = accepted_at.tz_localize(None).normalize()
                 if day < starts[i] or (pd.notna(ends[i]) and day > ends[i]):
@@ -106,7 +108,7 @@ def build_evolving_frames() -> dict[str, pd.DataFrame]:
                     "security_id": security_id,
                     "accession_number": f"EV-{year}-{filing_number}-{i:04d}",
                     "accepted_at": accepted_at,
-                    "period_end": day - pd.Timedelta("45D"),
+                    "period_end": day - pd.offsets.Day(45),
                     "earnings_history_years": min(10, max(5, age)),
                     "positive_earnings_years": min(9, max(4, age - (i % 3))),
                     "normalized_net_income": ni,

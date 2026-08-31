@@ -15,7 +15,8 @@ The backtest does not apply today's portfolio to prior returns. It reconstructs 
 3. Merge raw prices and liquidity observations available by that date.
 4. Apply the accounting model for the company's domain and sector.
 5. Recalculate the selected strategy scenario and portfolio weights.
-6. Monitor every month and reconstruct the investable portfolio from the full dated NYSE universe in March, June, September, and December.
+6. Monitor every month, rebalance incumbent weights in March and September,
+   and reconstruct the full dated NYSE universe in June and December.
 7. Permit securities to enter, remain, or exit as listing status, filing vintages, eligibility, ranks, and portfolio constraints change.
 8. Process dividends, splits, delistings, transaction costs, tax lots, and annual tax settlements explicitly.
 
